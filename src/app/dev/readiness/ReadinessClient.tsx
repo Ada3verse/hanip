@@ -1,0 +1,16 @@
+"use client";
+import { useState } from "react";
+import { createReadinessReport, runReadinessScenario } from "@/lib/readiness/readinessEngine";
+import type { ReadinessReport, ReadinessScenarioResult } from "@/lib/readiness/types";
+import { READINESS_SCENARIOS } from "./scenarios";
+
+export default function ReadinessClient() {
+  const [report, setReport] = useState<ReadinessReport | null>(null); const [results, setResults] = useState<Record<string, ReadinessScenarioResult>>({}); const [running, setRunning] = useState(false);
+  async function runAll() { if (running) return; setRunning(true); const next = await createReadinessReport(READINESS_SCENARIOS); setReport(next); setResults(Object.fromEntries(next.scenarios.map((item) => [item.id, item]))); setRunning(false); }
+  async function runOne(id: string) { const scenario = READINESS_SCENARIOS.find((item) => item.id === id); if (!scenario) return; const value = await runReadinessScenario(scenario); setResults((current) => ({ ...current, [id]: value })); }
+  const status = report?.status === "ready" ? "READY" : report?.status === "warning" ? "WARNING" : report?.status === "not_ready" ? "NOT READY" : "NOT RUN";
+  return <main className="min-h-screen bg-zinc-100 px-4 py-8 text-black"><div className="mx-auto max-w-6xl"><header className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm font-semibold text-zinc-600">Development only</p><h1 className="mt-1 text-3xl font-bold">MVP Readiness Gate</h1><p className="mt-2">최종 상태: <strong>{status}</strong> · blocking {report?.blockingIssueCount ?? 0} · warning {report?.warningCount ?? 0}</p></div><button disabled={running} onClick={() => void runAll()} className="rounded-lg bg-black px-4 py-3 font-semibold text-white disabled:opacity-50">{running ? "전체 실행 중" : "전체 시나리오 실행"}</button></header>
+    <section className="mt-8 grid gap-4 md:grid-cols-2">{READINESS_SCENARIOS.map((scenario) => { const value = results[scenario.id]; return <article key={scenario.id} className="rounded-2xl bg-white p-5 shadow-sm"><div className="flex justify-between gap-3"><div><h2 className="font-bold">{scenario.id}. {scenario.title}</h2><p className="mt-1 text-sm">{value ? value.checks.every(({ status }) => status === "pass") ? "통과" : "확인 필요" : "미실행"}</p></div><button onClick={() => void runOne(scenario.id)} className="rounded-lg border border-black px-3 py-2 text-sm font-semibold">실행</button></div>{value && <div className="mt-4 space-y-3 text-xs"><ul>{value.checks.map((check) => <li key={check.id}>{check.status.toUpperCase()} · {check.id} · {check.message}</li>)}</ul>{value.failedStep && <p>실패 단계: {value.failedStep}</p>}<details><summary>Runtime Event</summary><pre className="mt-2 overflow-auto whitespace-pre-wrap">{JSON.stringify(value.runtimeEvents, null, 2)}</pre></details><details><summary>Repository 차이</summary><pre className="mt-2 whitespace-pre-wrap">{value.repositoryDiff.join("\n") || "변경 없음"}</pre></details><button onClick={() => void navigator.clipboard.writeText(`${scenario.id} ${scenario.title}\n${value.checks.map((item) => `${item.id}: ${item.message}`).join("\n")}`)} className="underline">문제 복사용 요약</button></div>}</article>; })}</section>
+  </div></main>;
+}
+

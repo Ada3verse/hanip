@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function OfflinePage() { return <main className="flex min-h-screen items-center justify-center bg-white px-6 text-black"><section className="max-w-md text-center"><h1 className="text-2xl font-bold">인터넷 연결을 확인해 주세요.</h1><p className="mt-4 leading-7 text-zinc-600">연결이 돌아오면 현재 학습을 다시 이어갈 수 있어요.</p><Link href="/" className="mt-7 inline-block min-h-11 rounded-lg bg-black px-5 py-3 font-semibold text-white">다시 확인</Link></section></main>; }
