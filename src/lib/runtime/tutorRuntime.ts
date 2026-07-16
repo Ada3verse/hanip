@@ -2,6 +2,7 @@ import { createMockChatResponseEngine } from "@/lib/testing/mockChatResponse";
 import { createDefaultUserSettings, normalizeUserSettings } from "@/lib/settings/settingsEngine";
 import type { RuntimeContext, RuntimeEvent, RuntimeLog, RuntimeStep, TutorRuntimeInput, TutorRuntimeResult } from "./types";
 import { RUNTIME_STEPS } from "./types";
+import { mockResponseGenerator } from "./mockResponseGenerator";
 
 function emptyContext(input: TutorRuntimeInput): RuntimeContext {
   return { authUser: input.authUser ?? null, repository: input.repository ?? null, learningState: input.request.learningState ?? null, mastery: null, adaptiveProfile: null, misconceptionProfile: null, hintState: null, goal: null, evaluation: null, retrieval: null, workedExample: null, summary: null, tutorSettings: null, chatHistory: input.request.messages };
@@ -33,7 +34,7 @@ export async function runTutorRuntime(input: TutorRuntimeInput): Promise<TutorRu
     push(step);
   }
   if (!failures.has("RESPONSE")) {
-    try { response = createMockChatResponseEngine(input.request); hydrateContext(context, response); push("RESPONSE"); }
+    try { const plannedResponse = createMockChatResponseEngine(input.request); response = await (input.responseGenerator ?? mockResponseGenerator).generate({ request: input.request, plannedResponse }); hydrateContext(context, response); push("RESPONSE"); }
     catch { push("ERROR", "recovered", ["response_generation_failed"], ["fallback_response_used"]); }
   } else push("ERROR", "recovered", ["response_failed"], ["fallback_response_used"]);
   if (input.repository && input.authUser && !failures.has("SAVE")) {
@@ -47,4 +48,3 @@ export async function runTutorRuntime(input: TutorRuntimeInput): Promise<TutorRu
   if (response.meta) { response.meta.runtimeEvents = events; response.meta.runtimeLog = logs; }
   return { response, events, logs, context };
 }
-

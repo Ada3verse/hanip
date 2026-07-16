@@ -12,6 +12,7 @@ import type { SummaryState } from "@/lib/sessionSummary/types";
 import type { UserSettings } from "@/lib/settings/types";
 import type { ChatApiRequest, ChatApiResponse, ChatMessage } from "@/lib/types/chat";
 import type { WorkedExampleState } from "@/lib/workedExample/types";
+import type { RuntimeResponseGenerator } from "./responseGenerator";
 
 export const RUNTIME_STEPS = ["START", "RESTORE", "SESSION_START", "LEARNING_STATE", "GOAL", "ADAPTIVE", "RETRIEVAL", "EVALUATION", "MASTERY", "HINT", "WORKED_EXAMPLE", "MISCONCEPTION", "SUMMARY", "PERSONA", "RESPONSE", "SAVE"] as const;
 export type RuntimeStep = (typeof RUNTIME_STEPS)[number] | "ERROR";
@@ -23,5 +24,5 @@ export interface RuntimeContext {
   evaluation: AnswerEvaluationResult | null; retrieval: KnowledgeEvidenceBundle | null; workedExample: WorkedExampleState | null;
   summary: SummaryState | null; tutorSettings: UserSettings | null; chatHistory: ChatMessage[];
 }
-export interface TutorRuntimeInput { request: ChatApiRequest; authUser?: AuthUser | null; repository?: LearningRepository | null; failSteps?: RuntimeStep[]; }
+export interface TutorRuntimeInput { request: ChatApiRequest; authUser?: AuthUser | null; repository?: LearningRepository | null; failSteps?: RuntimeStep[]; responseGenerator?: RuntimeResponseGenerator; }
 export interface TutorRuntimeResult { response: ChatApiResponse; events: RuntimeEvent[]; logs: RuntimeLog[]; context: RuntimeContext; }

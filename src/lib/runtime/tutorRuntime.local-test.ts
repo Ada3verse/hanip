@@ -3,6 +3,8 @@ import { MemoryStorage } from "@/lib/repository/localLearningRepository.local-te
 import type { AuthUser } from "@/lib/auth/types";
 import { runTutorRuntime } from "./tutorRuntime";
 import { RUNTIME_STEPS } from "./types";
+import { selectResponseProvider, type RuntimeResponseGenerator } from "./responseGenerator";
+import { createLiveResponseCore, getLiveErrorCategory, SAFE_LIVE_RESPONSE_MESSAGE } from "./liveResponseCore";
 
 function check(value: unknown, message: string) { if (!value) throw new Error(`Tutor Runtime test failed: ${message}`); }
 export async function runTutorRuntimeTests() {
@@ -26,4 +28,23 @@ export async function runTutorRuntimeTests() {
   check(result.response.meta?.tutorPersona && result.context.chatHistory.length === 1, "O/S persona/runtime context");
   check(recovered.events.some(({ warning }) => warning.includes("engine_skipped")), "R warning");
   check(!JSON.stringify(result.response).includes("runtime-user") && !JSON.stringify(result.response).includes("repository"), "T minimal public response");
+  check(selectResponseProvider("true") === "mock" && selectResponseProvider("") === "mock" && selectResponseProvider(undefined) === "mock", "U mock and empty setting");
+  check(selectResponseProvider("false") === "openai" && selectResponseProvider("true", true, false) === "blocked" && selectResponseProvider("true", true, true) === "openai", "V live selection and manual gate");
+  let receivedPlan = false;
+  const liveGenerator: RuntimeResponseGenerator = { provider: "openai", async generate({ plannedResponse }) { receivedPlan = Boolean(plannedResponse.meta?.dialoguePlan && plannedResponse.meta?.retrieval); return { message: "명사와 대명사의 차이를 예문 두 개로 설명하는 Live 테스트 응답", suggestedReplies: [], meta: plannedResponse.meta }; } };
+  const live = await runTutorRuntime({ request, authUser, repository, responseGenerator: liveGenerator });
+  check(receivedPlan && live.response.message.includes("Live 테스트 응답") && !live.response.message.includes("어디에서 막혔는지"), "W Runtime plan reaches Live generator");
+  const plannedResponse = result.response;
+  const missingKey = createLiveResponseCore({ client: null, createRequest: () => ({}) });
+  check((await missingKey.generate({ request, plannedResponse })).message === SAFE_LIVE_RESPONSE_MESSAGE, "X missing API key fallback");
+  for (const [status, expected] of [[401, "authentication"], [429, "rate_limit"]] as const) {
+    let category = "";
+    const failing = createLiveResponseCore({ client: { async create() { throw Object.assign(new Error("provider"), { status }); } }, createRequest: () => ({}), log: (entry) => { category = entry.category; } });
+    check((await failing.generate({ request, plannedResponse })).message === SAFE_LIVE_RESPONSE_MESSAGE && category === expected, `Y ${status} fallback`);
+  }
+  const abortError = new DOMException("timeout", "AbortError");
+  check(getLiveErrorCategory(abortError) === "timeout", "Z timeout category");
+  const plain = createLiveResponseCore({ client: { async create() { return { output_text: "자연어 응답" }; } }, createRequest: () => ({}) });
+  const normalized = await plain.generate({ request, plannedResponse });
+  check(normalized.message === "자연어 응답" && normalized.suggestedReplies.length === 0 && normalized.meta === plannedResponse.meta, "AA plain text normalization and response contract");
 }

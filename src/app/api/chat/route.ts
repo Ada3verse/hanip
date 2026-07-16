@@ -29,6 +29,9 @@ import {
 } from "@/lib/knowledge/dependency/learningRoute";
 import { createMockChatResponse } from "@/lib/testing/mockChatResponse";
 import { runTutorRuntime } from "@/lib/runtime/tutorRuntime";
+import { mockResponseGenerator } from "@/lib/runtime/mockResponseGenerator";
+import { createOpenAIResponseGenerator } from "@/lib/runtime/openAIResponseGenerator";
+import { selectResponseProvider } from "@/lib/runtime/responseGenerator";
 import {
   buildLearningStateContext,
   calculateLearningState,
@@ -105,6 +108,7 @@ type OpenAIErrorInfo = ChatApiErrorResponse["error"] & {
 const RETRY_DELAYS_MS = [1000, 2000] as const;
 const MAX_LIVE_TEST_REQUESTS = 3;
 let liveTestRequestCount = 0;
+function isTutorRuntimeEnabled(): boolean { return true; }
 
 function getOpenAIErrorInfo(error: unknown): OpenAIErrorInfo {
   const status =
@@ -875,10 +879,23 @@ export async function POST(request: Request) {
       );
     }
 
-    // 모든 학생 채팅은 Runtime 단일 진입점을 사용합니다. 이 단계에서는 Live AI를 호출하지 않습니다.
-    const runtimeEnabled = (() => true)();
-    if (runtimeEnabled) {
-      const runtimeResult = await runTutorRuntime({ request: normalizedRequest });
+    if (isTutorRuntimeEnabled()) {
+      const responseProvider = selectResponseProvider(process.env.HANIP_USE_MOCK_AI, liveTestRequested, liveTestsEnabled);
+      const useLiveGenerator = responseProvider === "openai";
+      if (liveTestRequested) {
+        if (liveTestRequestCount >= MAX_LIVE_TEST_REQUESTS) {
+          return NextResponse.json<ChatApiErrorResponse>({ error: { code: "LIVE_TEST_LIMIT_REACHED", message: "개발용 실제 AI 테스트 한도에 도달했습니다.", retryable: false } }, { status: 429 });
+        }
+        liveTestRequestCount += 1;
+      }
+      const responseGenerator = useLiveGenerator
+        ? createOpenAIResponseGenerator({
+            apiKey: process.env.OPENAI_API_KEY,
+            model: process.env.OPENAI_MODEL,
+            log: ({ provider, category, requestId, elapsed }) => console.error("AI response generator failed", { provider, category, requestId, elapsed }),
+          })
+        : mockResponseGenerator;
+      const runtimeResult = await runTutorRuntime({ request: normalizedRequest, responseGenerator });
       return NextResponse.json(runtimeResult.response);
     }
 
