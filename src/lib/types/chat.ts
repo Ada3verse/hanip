@@ -13,6 +13,7 @@ import type { GoalState } from "@/lib/goal/types";
 import type { MisconceptionProfile } from "@/lib/misconceptionLearning/types";
 import type { AdaptiveProfile, AdaptiveTurnStrategy } from "@/lib/adaptive/types";
 import type { RuntimeEvent, RuntimeLog } from "@/lib/runtime/types";
+import type { RuntimeStudentModel } from "@/lib/studentModel/types";
 
 export const AI_EVALUATIONS = [
   "correct",
@@ -88,6 +89,8 @@ export type AiMeta = {
   adaptiveStrategy?: AdaptiveTurnStrategy;
   runtimeEvents?: RuntimeEvent[];
   runtimeLog?: RuntimeLog[];
+  studentModel?: RuntimeStudentModel;
+  explanationPlan?: import("@/lib/explanation/types").ExplanationPlan;
 };
 
 export type StudentSessionModel = {
@@ -130,6 +133,10 @@ export type StudentSessionModel = {
   adaptiveProfile?: AdaptiveProfile;
   responseModeHistory?: StudentResponseMode[];
   sessionSummaries?: SummaryState[];
+  studentProfile?: RuntimeStudentModel;
+  knowledgePackId?: string;
+  knowledgeReleaseId?: string;
+  knowledgeVersion?: string;
 };
 
 export type ChatApiRequest = {
@@ -166,6 +173,12 @@ export const CHAT_API_ERROR_CODES = [
   "INVALID_REQUEST",
   "LIVE_TESTS_DISABLED",
   "LIVE_TEST_LIMIT_REACHED",
+  "PROVIDER_CONFIGURATION_ERROR",
+  "AUTHENTICATION_ERROR",
+  "QUOTA_EXCEEDED",
+  "NETWORK_ERROR",
+  "INVALID_RESPONSE",
+  "KNOWLEDGE_NOT_FOUND",
   "UNKNOWN_ERROR",
 ] as const;
 

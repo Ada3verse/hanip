@@ -1,0 +1,3 @@
+export interface AdminSessionRecord { id: string; adminId: string; tokenHash: string; createdAt: string; expiresAt: string; revokedAt: string | null; }
+export interface AdminAuditEvent { adminId: string; action: string; targetType: string; targetIdHash: string; reason: string; createdAt: string; result: "success" | "failure"; requestId: string; }
+export interface AdminSecurityStore { saveSession(record: AdminSessionRecord): void | Promise<void>; getSession(id: string): AdminSessionRecord | null | Promise<AdminSessionRecord | null>; revokeSession(id: string): void | Promise<void>; audit(event: AdminAuditEvent): void | Promise<void>; }

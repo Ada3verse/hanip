@@ -1,0 +1,2 @@
+import { AdminDataView } from "../AdminDataView";import { AdminShell } from "../AdminShell";import { RetentionClient } from "./RetentionClient";
+export default function RetentionPage(){return <AdminShell title="보유기간 관리"><p className="mb-4 text-sm text-gray-600">실제 삭제는 재인증과 확인 문구가 필요한 보호 API에서만 수행됩니다.</p><AdminDataView endpoint="/api/admin/retention" kind="retention" /><RetentionClient/></AdminShell>}

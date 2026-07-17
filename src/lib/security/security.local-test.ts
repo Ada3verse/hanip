@@ -1,0 +1,51 @@
+import { StudentAuthService, MemoryStudentCredentialStore, GENERIC_LOGIN_ERROR, LOCKED_LOGIN_MESSAGE, PIN_ATTEMPT_LIMIT_MESSAGE } from "./authService";
+import { resetStudentPin } from "./accountAdministration";
+import { hashPin, nicknameLookupHash, verifyPin } from "./pin";
+import { LoginAttemptLimiter } from "./rateLimit";
+import { filterPersonalData } from "./privacyFilter";
+import { issueStudentSession, MemoryStudentSessionStore, verifyStudentSession } from "./session";
+import { MemoryPrivacyRequestStore } from "./privacyRequests";
+import type { StudentCredentialRecord } from "./types";
+
+export async function runSecurityLocalTests() {
+  let passed = 0; const check = (value: unknown, label: string) => { if (!value) throw new Error(`Security local test failed: ${label}`); passed += 1; };
+  const pepper = "test-only-pepper"; const secret = "test-only-session-secret"; const pinHash = await hashPin("1234", pepper);
+  check(!pinHash.includes("1234") && pinHash.startsWith("scrypt-v1$"), "PIN plaintext absent");
+  check(await verifyPin("1234", pinHash, pepper) && !(await verifyPin("9999", pinHash, pepper)), "PIN safe verification");
+  const lookup = nicknameLookupHash("푸른잎", pepper); const record: StudentCredentialRecord = { uid: "student-a", nicknameDisplay: "푸른잎", nicknameNormalizedHash: lookup, pinHash, status: "active", role: "student", consentState: null, failedLoginCount: 0, lockCount: 0, lockedUntil: null, sessionVersion: 1 };
+  const credentials = new MemoryStudentCredentialStore([record]); const sessions = new MemoryStudentSessionStore(); const now = 0; const limiter = new LoginAttemptLimiter(() => now);
+  const auth = new StudentAuthService({ credentials, sessions, pepper, sessionSecret: secret, limiter, now: () => now });
+  const noConsent = await auth.login({ nickname: "푸른잎", pin: "1234", ipHash: "consent-ip", requiredConsent: false }); check(!noConsent.ok, "required consent blocks access");
+  const noUser = await auth.login({ nickname: "없는학생", pin: "9999", ipHash: "ip", requiredConsent: true }); const wrong = await auth.login({ nickname: "푸른잎", pin: "9999", ipHash: "ip", requiredConsent: true });
+  check(!noUser.ok && !wrong.ok && noUser.message === wrong.message && wrong.message === GENERIC_LOGIN_ERROR, "account enumeration blocked");
+  check(!wrong.ok && wrong.remainingAttempts === 4, "first failure reports four remaining");
+  for (let index = 0; index < 3; index += 1) await auth.login({ nickname: "푸른잎", pin: "9999", ipHash: `lock-ip-${index}`, requiredConsent: true });
+  const fourthRecord=await credentials.findByNicknameHash(lookup);check(fourthRecord?.failedLoginCount===4,"four failures persist");
+  const preLockCookie=await issueStudentSession("student-a","student",1,secret,sessions,now);
+  const locked = await auth.login({ nickname: "푸른잎", pin: "9999", ipHash: "lock-ip-final", requiredConsent: true }); check(!locked.ok && locked.locked && locked.code==="PIN_ATTEMPTS_EXHAUSTED" && locked.message===PIN_ATTEMPT_LIMIT_MESSAGE, "five failures lock");
+  check(!(await verifyStudentSession(preLockCookie,secret,sessions,1,now)),"locking revokes existing sessions");
+  const blocked = await auth.login({ nickname: "푸른잎", pin: "1234", ipHash: "new-ip", requiredConsent: true }); check(!blocked.ok && blocked.code==="ACCOUNT_LOCKED" && blocked.message===LOCKED_LOGIN_MESSAGE, "sixth login blocked before PIN verification");
+  const stillLocked=await credentials.findByNicknameHash(lookup);check(stillLocked?.failedLoginCount===5&&stillLocked.status==="locked","blocked retry does not increase failures");
+  const resetCandidateCookie=await issueStudentSession("student-a","student",1,secret,sessions,now);
+  await resetStudentPin({nickname:"푸른잎",pin:"5678",pepper,credentials,sessions,audit:()=>undefined,now:new Date(now)});
+  const resetRecord=await credentials.findByNicknameHash(lookup);check(resetRecord?.status==="active"&&resetRecord.failedLoginCount===0&&resetRecord.lockedUntil===null,"PIN reset clears lock");
+  check(!(await verifyStudentSession(resetCandidateCookie,secret,sessions,1,now)),"PIN reset revokes existing sessions");
+  const success = await auth.login({ nickname: "푸른잎", pin: "5678", ipHash: "new-ip-after-reset", requiredConsent: true }); check(success.ok, "valid login after PIN reset");
+  if (!success.ok) throw new Error("unreachable");
+  const verified = await verifyStudentSession(success.cookie, secret, sessions, 2, now); check(verified?.uid === "student-a", "session verified");
+  sessions.revoke(verified!.id); check(!(await verifyStudentSession(success.cookie, secret, sessions, 1)), "logout revokes");
+  const resetCookie = await issueStudentSession("student-a", "student", 1, secret, sessions); check(!(await verifyStudentSession(resetCookie, secret, sessions, 2)), "PIN reset invalidates old version");
+  const tampered = `${resetCookie.slice(0, -2)}xx`; check(!(await verifyStudentSession(tampered, secret, sessions)), "tampered session blocked");
+  const expiredCookie = await issueStudentSession("student-a", "student", 1, secret, sessions, 0); check(!(await verifyStudentSession(expiredCookie, secret, sessions, 1, 13 * 60 * 60 * 1_000)), "absolute expiry blocks session");
+  const filtered = filterPersonalData("연락처 010-1234-5678, a@example.com"); check(filtered.detected.length === 2 && !filtered.safeText.includes("010-1234-5678"), "personal data masked");
+  const resident = filterPersonalData("주민번호 010101-3123456"); check(resident.blocked && !resident.safeText.includes("010101-3123456"), "sensitive number blocked");
+  const xss = filterPersonalData("<script>alert(1)</script>"); check(xss.safeText === "<script>alert(1)</script>", "XSS stays inert text for React rendering");
+  check(auth.audit.every((event) => !JSON.stringify(event).includes("1234") && !JSON.stringify(event).includes("푸른잎")), "audit excludes PIN and nickname");
+  const requests = new MemoryPrivacyRequestStore(); const deletion = requests.submit("student-a", "account_delete"); check(deletion.status === "submitted", "deletion request submitted");
+  try { requests.update(deletion.id, "rejected"); check(false, "rejection needs reason"); } catch { check(true, "rejection needs reason"); }
+  check(requests.update(deletion.id, "processing")?.status === "processing", "request state transition");
+  check((await credentials.findByNicknameHash(lookup))?.consentState?.optionalAnalytics === false, "optional consent not forced");
+  check((await credentials.findByNicknameHash(lookup))?.consentState?.termsVersion === "2026-07-01-v1", "consent version recorded");
+  check(auth.audit.every((event) => !JSON.stringify(event).includes("pinHash") && !JSON.stringify(event).includes("conversation")), "safe security log");
+  return passed;
+}

@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/uploads/
+/private-source-documents/
 
 # next.js
 /.next/

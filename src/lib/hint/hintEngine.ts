@@ -30,11 +30,11 @@ export function calculateHintState(input: HintEngineInput): HintState {
       : createInitialHintState(input.conceptId);
   const evaluationSignal = getEvaluationHintSignal(input.evaluation);
   const masteryPreference = getMasteryHintPreference(input.mastery);
-  if (input.workedExampleActive) {
-    return { ...previous, maintainFocus: true };
-  }
   if (evaluationSignal === "reset") {
     return createInitialHintState(input.conceptId);
+  }
+  if (input.workedExampleActive) {
+    return { ...previous, maintainFocus: true };
   }
 
   let hintLevel = previous.hintLevel;

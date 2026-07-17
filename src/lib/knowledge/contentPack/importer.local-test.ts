@@ -23,4 +23,5 @@ export function runContentPackImporterLocalTests() {
   check(getImportedKnowledgeModules().length >= 6 && getImportedCompletionCriteria().length >= 6 && getImportedDependencies().some(({ id, prerequisites }) => id === "word" && prerequisites.includes("morpheme")), "role libraries and dependency graph connected");
   const mock = createMockChatResponse({ messages: [{ role: "user", content: "형태소가 뭐예요?" }] });
   check(!/verified-fixture-source|verificationStatus|테스트 fixture/.test(mock.message), "student response hides source metadata");
+  resetImportedContentPacksForTest();
 }

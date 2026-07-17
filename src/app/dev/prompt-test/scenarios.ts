@@ -228,7 +228,7 @@ export const SCENARIOS: PromptTestScenario[] = [
   {
     id: "f",
     title: "시나리오 F: 수사와 수 관형사 첫 질문",
-    description: "콘텐츠 지식을 사용하되 정의를 나열하지 않고 판별 기준으로 진단하는지 확인합니다.",
+    description: "명시적인 구분 요청에 직접 답한 뒤 판별 기준을 확인하는지 확인합니다.",
     messages: [
       {
         role: "user",
@@ -240,8 +240,8 @@ export const SCENARIOS: PromptTestScenario[] = [
     expectedNextActions: ["확인", "진단", "판단", "기준", "질문", "관찰"],
     requiredMessagePatterns: [
       {
-        label: "전체 정의보다 학생의 현재 생각을 진단함",
-        pattern: /확인|생각|먼저|어떻게|같다고|다르다고/,
+        label: "수사와 수 관형사의 차이에 직접 답함",
+        pattern: /수사[^?？]*(?:체언|조사)[^?？]*수\s*관형사[^?？]*(?:뒤의 명사|직접 꾸)/,
       },
       {
         label: "뒤 명사 수식 또는 조사 결합 기준으로 접근함",
@@ -252,12 +252,7 @@ export const SCENARIOS: PromptTestScenario[] = [
         pattern: ONE_QUESTION_PATTERN,
       },
     ],
-    forbiddenMessagePatterns: [
-      {
-        label: "수사와 수 관형사의 전체 정의를 한꺼번에 설명하지 않음",
-        pattern: /수사는[^?？]*체언[^?？]*수\s*관형사는[^?？]*관형사|수\s*관형사는[^?？]*관형사[^?？]*수사는[^?？]*체언/,
-      },
-    ],
+    forbiddenMessagePatterns: [],
   },
   {
     id: "g",
@@ -530,7 +525,7 @@ export const SCENARIOS: PromptTestScenario[] = [
   {
     id: "m",
     title: "시나리오 M: 처음부터 배우기",
-    description: "개념 학습 모드가 현재 생각을 확인하는 진단부터 시작하는지 확인합니다.",
+    description: "개념 학습 모드에서도 명시적인 구분 요청에 직접 답하는지 확인합니다.",
     learningMode: "learn",
     messages: [
       { role: "user", content: "수사와 수 관형사는 어떻게 구분해요?" },
@@ -540,17 +535,12 @@ export const SCENARIOS: PromptTestScenario[] = [
     expectedNextActions: ["진단", "확인", "관찰", "질문"],
     requiredMessagePatterns: [
       {
-        label: "학생의 현재 생각을 확인하는 진단 질문부터 시작함",
-        pattern: /생각|알고|같은 품사|다른 품사|어떻게 보|확인/, 
+        label: "핵심 차이를 설명한 뒤 확인 질문을 제시함",
+        pattern: /수사[^?？]*(?:체언|조사)[^?？]*수\s*관형사[^?？]*(?:뒤의 명사|직접 꾸)/,
       },
       { label: "질문 하나로 응답함", pattern: ONE_QUESTION_PATTERN },
     ],
-    forbiddenMessagePatterns: [
-      {
-        label: "판별 기준을 먼저 길게 설명하지 않음",
-        pattern: /수사는[^?？]{30,}수\s*관형사는/,
-      },
-    ],
+    forbiddenMessagePatterns: [],
   },
   {
     id: "n",

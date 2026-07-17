@@ -2,13 +2,40 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedInAs(uid) { return request.auth != null && request.auth.uid == uid; }
+    function learningKeys() { return ['schemaVersion','profile','settings','sessions','currentSessionId','studentModel','progress','mastery','adaptive','misconceptions','summary','goal','hints','workedExamples']; }
     match /users/{uid} {
-      allow read, create, update, delete: if request.auth != null && request.auth.uid == uid;
+      allow read, create, update, delete: if false;
 
-      match /{document=**} {
-        allow read, create, update, delete: if request.auth != null && request.auth.uid == uid;
+      match /sessions/{sessionId} { allow read, write: if false; }
+
+      match /learningState/{documentId} {
+        allow read: if signedInAs(uid);
+        allow write: if false;
       }
+
+      match /conversations/{conversationId} {
+        allow read: if signedInAs(uid);
+        allow create, update: if false;
+        allow delete: if false;
+        match /messages/{messageId} {
+          allow read: if signedInAs(uid);
+          allow create: if false;
+          allow update, delete: if false;
+        }
+      }
+
+      match /consents/{consentId} { allow read: if signedInAs(uid); allow write: if false; }
+      match /privacyRequests/{requestId} { allow read: if signedInAs(uid); allow create: if signedInAs(uid) && request.resource.data.keys().hasOnly(['type','status','submittedAt']); allow update, delete: if false; }
+      match /{document=**} { allow read, write: if false; }
     }
+
+    match /studentCredentials/{uid} { allow read, write: if false; }
+    match /securityLogs/{logId} { allow read, write: if false; }
+    match /adminSessions/{sessionId} { allow read, write: if false; }
+    match /adminAuditLogs/{logId} { allow read, write: if false; }
+    match /retentionAuditLogs/{logId} { allow read, write: if false; }
+    match /admin/{document=**} { allow read, write: if false; }
 
     match /{document=**} {
       allow read, write: if false;

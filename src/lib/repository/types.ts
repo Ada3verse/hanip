@@ -13,8 +13,9 @@ import type {
 } from "@/lib/types/chat";
 import type { WorkedExampleState } from "@/lib/workedExample/types";
 import type { UserSettings } from "@/lib/settings/types";
+import type { RuntimeStudentModel } from "@/lib/studentModel/types";
 
-export const LEARNING_REPOSITORY_SCHEMA_VERSION = 1 as const;
+export const LEARNING_REPOSITORY_SCHEMA_VERSION = 2 as const;
 
 export interface LearningSettings extends UserSettings {
   learningMode: LearningMode;
@@ -35,11 +36,11 @@ export interface StoredLearningSession {
 }
 
 export interface LearningUserData {
-  schemaVersion: 1;
+  schemaVersion: 2;
   userId: string;
   currentSessionId: string | null;
   sessions: StoredLearningSession[];
-  studentModel: StudentSessionModel | null;
+  studentModel: RuntimeStudentModel;
   progress: LearningProgress;
   masteryProfiles: MasteryState[];
   hintStates: HintState[];
@@ -54,7 +55,7 @@ export interface LearningUserData {
 }
 
 export interface LearningDataExport {
-  schemaVersion: 1;
+  schemaVersion: 2;
   exportedAt: string;
   data: LearningUserData;
 }

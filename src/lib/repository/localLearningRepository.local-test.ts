@@ -1,5 +1,6 @@
 import { createEmptyLearningProgress } from "@/lib/progress/progressStorage";
 import { LocalLearningRepository, createEmptyLearningUserData, repositoryStorageKey } from "./localLearningRepository";
+import { createEmptyRuntimeStudentModel, updateRuntimeStudentModel } from "@/lib/studentModel/studentModelEngine";
 const TEST_USER_ID = "test-local-user";
 
 class MemoryStorage implements Storage {
@@ -33,7 +34,8 @@ export async function runLocalLearningRepositoryTests() {
   check(storage.getItem(repositoryStorageKey("other-user")) !== storage.getItem(repositoryStorageKey(TEST_USER_ID)), "B user isolation");
 
   const now = new Date().toISOString();
-  await repository.saveSession(TEST_USER_ID, { sessionId: "s1", messages: [{ id: "m1", role: "user", content: "품사" }], studentModel: model, learningMode: "learn", learningGoal: "concept", activeSuggestedReplies: [], lastWorkedExampleId: null, contextSummary: "", createdAt: now, updatedAt: now });
+  const canonicalModel = updateRuntimeStudentModel({ previous: createEmptyRuntimeStudentModel(now), studentAnswer: "명사는 이름을 나타내는 말이기 때문이에요.", concept: "명사", evaluation: "correct", now });
+  await repository.saveSession(TEST_USER_ID, { sessionId: "s1", messages: [{ id: "m1", role: "user", content: "품사" }], studentModel: { ...model, studentProfile: canonicalModel }, learningMode: "learn", learningGoal: "concept", activeSuggestedReplies: [], lastWorkedExampleId: null, contextSummary: "", createdAt: now, updatedAt: now });
   check((await repository.loadSession(TEST_USER_ID, "s1"))?.messages.length === 1, "C session save/load");
   const data = repository.loadUserDataSync(TEST_USER_ID)!;
   data.progress = { ...createEmptyLearningProgress(), concepts: [{ conceptId: "pos", conceptName: "품사", status: "learning", masteryScore: 40, successfulApplications: 1, misconceptionIds: [], needsSupportCount: 0, completedSessionCount: 0, lastLearningMode: "learn", lastLearningGoal: "concept", lastStudiedAt: now }] };
@@ -53,11 +55,11 @@ export async function runLocalLearningRepositoryTests() {
 
   await repository.resetCurrentSession(TEST_USER_ID);
   const resetSession = repository.loadUserDataSync(TEST_USER_ID)!;
-  check(resetSession.sessions.length === 0 && resetSession.progress.concepts.length === 1, "H current reset keeps long-term state");
+  check(resetSession.sessions.length === 0 && resetSession.progress.concepts.length === 1 && Boolean(resetSession.studentModel.concepts.명사), "H current reset keeps long-term Student Model");
   resetSession.settings.tutorName = "선생님";
   repository.saveUserDataSync(TEST_USER_ID, resetSession);
   await repository.resetLearningProgress(TEST_USER_ID);
-  check(repository.loadUserDataSync(TEST_USER_ID)!.settings.tutorName === "선생님", "I full reset keeps settings");
+  check(repository.loadUserDataSync(TEST_USER_ID)!.settings.tutorName === "선생님" && Object.keys(repository.loadUserDataSync(TEST_USER_ID)!.studentModel.concepts).length === 0, "I full reset clears Student Model and keeps settings");
 
   storage.setItem(repositoryStorageKey("broken"), "{");
   check((await repository.loadUserData("broken"))?.sessions.length === 0, "J broken JSON recovery");
@@ -70,8 +72,8 @@ export async function runLocalLearningRepositoryTests() {
   const exported = await repository.exportUserData(TEST_USER_ID);
   check((await repository.importUserData(TEST_USER_ID, exported)).success, "P export/import");
   check(!(await repository.importUserData(TEST_USER_ID, {})).success, "Q invalid import");
-  check((await repository.importUserData(TEST_USER_ID, { schemaVersion: 2 })).error === "UNSUPPORTED_VERSION", "R higher version");
-  check(repository.loadUserDataSync(TEST_USER_ID)?.schemaVersion === 1, "T repository-only storage access");
+  check((await repository.importUserData(TEST_USER_ID, { schemaVersion: 3 })).error === "UNSUPPORTED_VERSION", "R higher version");
+  check(repository.loadUserDataSync(TEST_USER_ID)?.schemaVersion === 2, "T repository-only storage access");
 }
 
 export { MemoryStorage };

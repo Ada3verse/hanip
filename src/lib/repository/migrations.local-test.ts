@@ -1,5 +1,5 @@
 import { LocalLearningRepository, repositoryStorageKey } from "./localLearningRepository";
-import { LEGACY_CHAT_KEY, LEGACY_PROGRESS_KEY, migrationMarkerKey } from "./migrations";
+import { LEGACY_CHAT_KEY, LEGACY_PROGRESS_KEY, migrationMarkerKey, studentModelMigrationMarkerKey } from "./migrations";
 import { MemoryStorage } from "./localLearningRepository.local-test";
 const TEST_USER_ID = "test-migration-user";
 
@@ -11,13 +11,14 @@ export function runRepositoryMigrationTests() {
   const storage = new MemoryStorage();
   const now = new Date().toISOString();
   storage.setItem(LEGACY_CHAT_KEY, JSON.stringify({ version: 1, savedAt: now, messages: [{ role: "user", content: "품사" }], studentModel: { currentConcept: "품사" }, learningMode: "learn", learningGoal: "concept", activeSuggestedReplies: [], lastWorkedExampleId: null, contextSummary: "" }));
-  storage.setItem(LEGACY_PROGRESS_KEY, JSON.stringify({ version: 1, updatedAt: now, totalSessions: 1, concepts: [] }));
+  storage.setItem(LEGACY_PROGRESS_KEY, JSON.stringify({ version: 1, updatedAt: now, totalSessions: 1, concepts: [{ conceptId: "noun", conceptName: "명사", status: "understood", masteryScore: 85, successfulApplications: 2, misconceptionIds: [], needsSupportCount: 0, completedSessionCount: 1, lastLearningMode: "learn", lastLearningGoal: "concept", lastStudiedAt: now, mastery: { conceptId: "noun", masteryScore: 85, confidence: .9, correctStreak: 2, lastReviewedAt: now, needsReview: false, reviewCount: 0, masteredAt: now, reviewInterval: 1, nextReviewAt: null } }] }));
   const repository = new LocalLearningRepository(storage);
   const migrated = repository.loadUserDataSync(TEST_USER_ID)!;
   check(migrated.sessions.length === 1 && migrated.progress.totalSessions === 1, "M legacy migration");
   repository.loadUserDataSync(TEST_USER_ID);
   check(repository.loadUserDataSync(TEST_USER_ID)!.sessions.length === 1, "N idempotent");
   check(Boolean(storage.getItem(migrationMarkerKey(TEST_USER_ID))), "marker saved");
+  check(Boolean(storage.getItem(studentModelMigrationMarkerKey(TEST_USER_ID))) && migrated.studentModel.concepts.noun?.understandingLevel === 3, "canonical Student Model migration");
   check(Boolean(storage.getItem(LEGACY_CHAT_KEY)), "legacy retained after success");
 
   const broken = new MemoryStorage();

@@ -30,11 +30,22 @@ import { runLocalAuthProviderTests } from "@/lib/auth/localAuthProvider.local-te
 import { runAuthSessionTests } from "@/lib/auth/authSession.local-test";
 import { runSettingsEngineTests } from "@/lib/settings/settingsEngine.local-test";
 import { runTutorRuntimeTests } from "@/lib/runtime/tutorRuntime.local-test";
+import { runResponseProviderFactoryLocalTests } from "@/lib/runtime/responseProviderFactory.local-test";
+import { runLiveResponseCoreLocalTests } from "@/lib/runtime/liveResponseCore.local-test";
+import { runRuntimeRequestGuardLocalTests } from "@/lib/runtime/requestGuard.local-test";
 import { runReadinessEngineTests } from "@/lib/readiness/readinessEngine.local-test";
 import { runFirebaseRepositoryLocalTests } from "@/lib/repository/firebase/firebase.local-test";
 import { runFirebaseProductionRepositoryLocalTests } from "@/lib/repository/firebase/firebaseRepository.local-test";
 import { runFirebaseHealthLocalTests } from "@/lib/firebase/health.local-test";
 import { runFirebaseConfigLocalTests } from "@/lib/firebase/config.local-test";
+import { runStudentModelTests } from "@/lib/studentModel/studentModelEngine.local-test";
+import { runStudentModelIntegrationTests } from "@/lib/studentModel/studentModelIntegration.local-test";
+import { runExplanationStrategyLocalTests } from "@/lib/explanation/explanationStrategy.local-test";
+import { runKnowledgeAuthoringLocalTests } from "@/lib/knowledge/authoring/authoring.local-test";
+import { runSourceIngestionLocalTests } from "@/lib/knowledge/ingestion/ingestion.local-test";
+import { runKnowledgeReleaseLocalTests } from "@/lib/knowledge/release/releaseEngine.local-test";
+import { runImportWizardLocalTests } from "@/lib/knowledge/importWizard/importWizard.local-test";
+import { runPartsOfSpeechTextbookDraftLocalTests } from "@/lib/knowledge/partsOfSpeech/textbookDraft/pack.local-test";
 import type { SelectedKnowledgeBundle } from "@/lib/knowledge/source/types";
 import type {
   AiMeta,
@@ -395,7 +406,7 @@ export default function PromptTestClient({
   } | null>(null);
   const [liveScenarioIds, setLiveScenarioIds] = useState<ScenarioId[]>([]);
   const [liveResults, setLiveResults] = useState<
-    Partial<Record<ScenarioId, ChatApiResponse | string>>
+    Partial<Record<ScenarioId, { response?: ChatApiResponse; error?: string; elapsed: number; provider: "openai"; apiCalled: boolean }>>
   >({});
   const [isRunningLive, setIsRunningLive] = useState(false);
 
@@ -440,7 +451,7 @@ export default function PromptTestClient({
     setLiveScenarioIds((current) =>
       current.includes(id)
         ? current.filter((item) => item !== id)
-        : current.length < 3
+        : current.length < 1
           ? [...current, id]
           : current,
     );
@@ -451,7 +462,7 @@ export default function PromptTestClient({
       !liveTestsEnabled ||
       isRunningLive ||
       liveScenarioIds.length === 0 ||
-      liveScenarioIds.length > 3
+      liveScenarioIds.length > 1
     ) return;
 
     setIsRunningLive(true);
@@ -472,6 +483,7 @@ export default function PromptTestClient({
       };
 
       try {
+        const startedAt = performance.now();
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: {
@@ -481,18 +493,15 @@ export default function PromptTestClient({
           body: JSON.stringify(requestBody),
         });
         const data: unknown = await response.json();
-        setLiveResults((current) => ({
-          ...current,
-          [id]:
-            response.ok && isChatApiResponse(data)
-              ? data
-              : "실제 AI 요청이 차단되었거나 실패했습니다.",
+        setLiveResults((current) => ({ ...current, [id]: response.ok && isChatApiResponse(data)
+          ? { response: data, elapsed: Math.round(performance.now() - startedAt), provider: "openai", apiCalled: true }
+          : { error: "실제 AI 요청이 차단되었거나 실패했습니다.", elapsed: Math.round(performance.now() - startedAt), provider: "openai", apiCalled: response.status !== 403 },
         }));
       } catch (error) {
         console.error("Failed to run live AI test:", error);
         setLiveResults((current) => ({
           ...current,
-          [id]: "실제 AI 요청에 실패했습니다.",
+          [id]: { error: "실제 AI 요청에 실패했습니다.", elapsed: 0, provider: "openai", apiCalled: true },
         }));
       }
     }
@@ -508,6 +517,14 @@ export default function PromptTestClient({
     runLearningRouteLocalTests();
     runLearningStateLocalTests();
     runDialoguePlannerLocalTests();
+    runStudentModelTests();
+    await runStudentModelIntegrationTests();
+    runExplanationStrategyLocalTests();
+    runKnowledgeAuthoringLocalTests();
+    await runSourceIngestionLocalTests();
+    runKnowledgeReleaseLocalTests();
+    await runImportWizardLocalTests();
+    runPartsOfSpeechTextbookDraftLocalTests();
     runTutorPersonaLocalTests();
     runSessionStartLocalTests();
     runQuestionUxLocalTests();
@@ -530,6 +547,9 @@ export default function PromptTestClient({
     await runAuthSessionTests();
     runSettingsEngineTests();
     await runTutorRuntimeTests();
+    runResponseProviderFactoryLocalTests();
+    await runLiveResponseCoreLocalTests();
+    runRuntimeRequestGuardLocalTests();
     await runFirebaseRepositoryLocalTests();
     await runFirebaseProductionRepositoryLocalTests();
     runFirebaseConfigLocalTests();
@@ -628,10 +648,10 @@ export default function PromptTestClient({
           <p className="mt-2 text-sm leading-6 text-zinc-700">
             {liveTestsEnabled
               ? "선택한 시나리오만 실제 AI로 순차 실행합니다."
-              : "HANIP_ENABLE_LIVE_AI_TESTS가 false여서 실제 AI 호출이 차단되어 있습니다."}
+              : "HANIP_USE_MOCK_AI=false와 HANIP_ENABLE_LIVE_AI_TESTS=true를 모두 설정해야 수동 실행할 수 있습니다."}
           </p>
           <p className="mt-2 text-sm font-semibold">
-            예상 요청 수: {liveScenarioIds.length}회 / 최대 3회
+            예상 요청 수: {liveScenarioIds.length}회 / 이번 실행 최대 1회
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {SCENARIOS.map((scenario) => (
@@ -642,7 +662,7 @@ export default function PromptTestClient({
                   disabled={
                     isRunningLive ||
                     (!liveScenarioIds.includes(scenario.id) &&
-                      liveScenarioIds.length >= 3)
+                      liveScenarioIds.length >= 1)
                   }
                   onChange={() => toggleLiveScenario(scenario.id)}
                   className="mt-1"
@@ -670,7 +690,10 @@ export default function PromptTestClient({
                 if (!result) return null;
                 return (
                   <li key={id}>
-                    <strong>{id.toUpperCase()}</strong>: {typeof result === "string" ? result : result.message}
+                    <strong>{id.toUpperCase()}</strong>: {result.response?.message ?? result.error}
+                    <span className="ml-2 text-zinc-600">
+                      Provider {result.provider} · 실제 호출 {result.apiCalled ? "예" : "아니요"} · {result.elapsed}ms · Concept {result.response?.meta?.concept ?? "-"} · Evidence {result.response?.meta?.retrieval?.usedEvidence.length ?? 0}개
+                    </span>
                   </li>
                 );
               })}

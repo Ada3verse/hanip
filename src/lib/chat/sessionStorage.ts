@@ -13,6 +13,7 @@ import type {
 import { HINT_TYPES } from "@/lib/hint/types";
 import { getLocalLearningRepository } from "@/lib/repository/repositoryFactory";
 import { getAuthSession } from "@/lib/auth/authSession";
+import { normalizeRuntimeStudentModel } from "@/lib/studentModel/studentModelEngine";
 
 function currentUserId() { return getAuthSession().getRequiredUser().id; }
 
@@ -163,6 +164,10 @@ function isStudentModel(value: unknown): value is StudentSessionModel {
     && (!("responseModeHistory" in value) ||
       (Array.isArray(value.responseModeHistory) && value.responseModeHistory.length <= 100 &&
         value.responseModeHistory.every((mode) => mode === "typed" || mode === "suggested")))
+    && (!("studentProfile" in value) || isRecord(value.studentProfile))
+    && (!('knowledgePackId' in value) || (typeof value.knowledgePackId === "string" && value.knowledgePackId.length <= MAX_MODEL_STRING_LENGTH))
+    && (!('knowledgeReleaseId' in value) || (typeof value.knowledgeReleaseId === "string" && value.knowledgeReleaseId.length <= MAX_MODEL_STRING_LENGTH))
+    && (!('knowledgeVersion' in value) || (typeof value.knowledgeVersion === "string" && value.knowledgeVersion.length <= 50))
   );
 }
 
@@ -325,6 +330,12 @@ function sanitizeStudentModel(model: StudentSessionModel): StudentSessionModel {
       : null,
     suspendedConcept:
       model.suspendedConcept?.slice(0, MAX_MODEL_STRING_LENGTH) ?? null,
+    studentProfile: model.studentProfile
+      ? normalizeRuntimeStudentModel(model.studentProfile)
+      : undefined,
+    knowledgePackId: model.knowledgePackId?.slice(0, MAX_MODEL_STRING_LENGTH),
+    knowledgeReleaseId: model.knowledgeReleaseId?.slice(0, MAX_MODEL_STRING_LENGTH),
+    knowledgeVersion: model.knowledgeVersion?.slice(0, 50),
   };
 }
 
@@ -403,7 +414,7 @@ export function loadChatSession(): PersistedChatSession | null {
     version: 1,
     savedAt: session.updatedAt,
     messages: session.messages,
-    studentModel: session.studentModel,
+    studentModel: { ...session.studentModel, studentProfile: data?.studentModel ?? session.studentModel.studentProfile },
     learningMode: session.learningMode,
     learningGoal: session.learningGoal,
     activeSuggestedReplies: session.activeSuggestedReplies,

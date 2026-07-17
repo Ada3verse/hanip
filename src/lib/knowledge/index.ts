@@ -39,6 +39,26 @@ export { importKnowledgeContentPack, getImportedContentPacks, getImportedConcept
 export { validateKnowledgeContentPack } from "@/lib/knowledge/contentPack/validator";
 export { sampleDraftPack } from "@/lib/knowledge/contentPack/sampleDraftPack";
 export type { KnowledgeContentPack, KnowledgeConceptEntry, ContentPackValidationResult } from "@/lib/knowledge/contentPack/types";
+export { authoringSamplePack } from "@/lib/knowledge/authoring/samplePack";
+export { partsOfSpeechTextbookDraftPack } from "@/lib/knowledge/partsOfSpeech/textbookDraft/pack";
+export { textbookDraftReviewQueue, textbookDraftConflicts, textbookDraftReviewReport } from "@/lib/knowledge/partsOfSpeech/textbookDraft/reviewQueue";
+export { partsOfSpeechTextbookDraftAudit, auditPartsOfSpeechTextbookDraft } from "@/lib/knowledge/partsOfSpeech/textbookDraft/audit";
+export type { TextbookSemanticChunk, TextbookConflictReview, TextbookDraftReviewReport } from "@/lib/knowledge/partsOfSpeech/textbookDraft/types";
+export { validateAuthoringPack } from "@/lib/knowledge/authoring/validator";
+export { calculateConceptCoverage } from "@/lib/knowledge/authoring/coverage";
+export { importRawSourceChunks } from "@/lib/knowledge/authoring/rawImporter";
+export { registerAuthoringPack, selectAuthoringEvidence } from "@/lib/knowledge/authoring/registry";
+export type { AuthoringKnowledgePack, AuthoringConcept, RawSourceChunk } from "@/lib/knowledge/authoring/types";
+export { ingestSourceDocument } from "@/lib/knowledge/ingestion/pipeline";
+export { FixtureDocumentExtractor, LocalPdfDocumentExtractor } from "@/lib/knowledge/ingestion/extractors";
+export { LocalSourceStorage } from "@/lib/knowledge/ingestion/storage";
+export { createReviewItems, decideReviewItem, applyReviewedItemsToDraft, canVerifyPack } from "@/lib/knowledge/ingestion/review";
+export type { SourceDocument, ExtractedPage, IngestionSourceChunk, ReviewItem, ContentConflict, DocumentExtractor, SourceStorage } from "@/lib/knowledge/ingestion/types";
+export { createPackWorkflow, transitionPack, completeChecklist, createReleaseCandidate, publishRelease, ActiveReleaseRegistry, pinSessionRelease, migrateStudentModel, diffReleases, isVersionBumpValid, createAuditEvent } from "@/lib/knowledge/release/releaseEngine";
+export type { KnowledgePackRelease, ActiveKnowledgeRelease, ReviewAssignment, ConceptReviewChecklist, ConceptMigration, KnowledgeAuditEvent, ReleaseDiff } from "@/lib/knowledge/release/types";
+export { createImportWizardState, selectFixture, extractFixture, gateForStep, moveWizard, createWizardReviewQueue, createWizardDraft, validateWizardDraft, prepareWizardVerification, createWizardCandidate } from "@/lib/knowledge/importWizard/importWizardEngine";
+export { HANIP_IMPORT_WIZARD_V1, saveImportWizard, loadImportWizard, clearImportWizard } from "@/lib/knowledge/importWizard/storage";
+export type { ImportWizardState, ImportWizardStep, ImportDocumentMetadata } from "@/lib/knowledge/importWizard/types";
 
 export type KnowledgeModule =
   | typeof numeralKnowledge

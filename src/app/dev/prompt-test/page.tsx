@@ -8,7 +8,10 @@ export default async function PromptTestPage() {
 
   return (
     <PromptTestClient
-      liveTestsEnabled={process.env.HANIP_ENABLE_LIVE_AI_TESTS === "true"}
+      liveTestsEnabled={
+        process.env.HANIP_ENABLE_LIVE_AI_TESTS === "true" &&
+        process.env.HANIP_USE_MOCK_AI === "false"
+      }
     />
   );
 }

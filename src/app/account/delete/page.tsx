@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function AccountDeletePage(){return <main className="min-h-screen bg-white px-5 py-10 text-black"><section className="mx-auto max-w-xl"><h1 className="text-3xl font-bold">계정 삭제 요청</h1><p className="mt-4 leading-7">계정 삭제는 본인 확인 후 처리합니다. 법령상 별도 보존 근거가 없는 계정, 학습 데이터와 대화를 삭제합니다.</p><p className="mt-5 rounded bg-zinc-100 p-4 text-sm">삭제 요청: 동신중학교 정보교육 담당(정경원) · 처리 상태는 submitted → verifying → processing → completed 순서로 기록합니다.</p><Link href="/account" className="mt-7 inline-block underline">취소하고 돌아가기</Link></section></main>}

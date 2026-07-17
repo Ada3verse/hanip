@@ -1,4 +1,4 @@
-import { createDialoguePlan } from "./dialoguePlanner";
+import { classifyUserIntent, createDialoguePlan } from "./dialoguePlanner";
 import { calculateLearningState } from "@/lib/learningState/learningStateEngine";
 import type { ChatMessage, StudentSessionModel } from "@/lib/types/chat";
 
@@ -48,5 +48,25 @@ export function runDialoguePlannerLocalTests() {
   ]);
   check(repeated.reason.includes("avoid_repeating_previous_question"), "I: repeat prevention");
   check(active.maxQuestions === 1, "J: one question maximum");
-  return 10;
+  const direct = plan(MODEL, [{ role: "user", content: "명사와 대명사의 차이를 예문 두 개로 설명해줘." }]);
+  check(direct.activeConcept === "명사와 대명사" && direct.directAnswerRequired === true && direct.requestedExampleCount === 2 && direct.responseMode === "direct_answer_then_check", "K: explicit comparison overrides route");
+  check(classifyUserIntent("명사와 대명사의 차이를 예문 두 개로 설명해줘.").includes("compare_request") && classifyUserIntent("잘 모르겠어").includes("uncertainty_or_confusion"), "L: user intent classification");
+  const reexplain = plan({ ...MODEL, consecutiveUnknownResponses: 1 }, [
+    { role: "user", content: "명사와 대명사의 차이를 예문 두 개로 설명해줘." },
+    { role: "assistant", content: "명사는 이름이고 대명사는 대신하는 말이야." },
+    { role: "user", content: "잘 모르겠어" },
+  ]);
+  check(reexplain.activeConcept === "명사와 대명사" && reexplain.responseMode === "same_concept_reexplain" && reexplain.prerequisiteAllowed === false, "M: first failure stays in concept");
+  const bridge = plan({ ...MODEL, consecutiveUnknownResponses: 2 }, [
+    { role: "user", content: "명사와 대명사의 차이를 예문 두 개로 설명해줘." },
+    { role: "assistant", content: "명사는 이름이고 대명사는 대신하는 말이야." },
+    { role: "user", content: "아직도 모르겠어" },
+  ]);
+  check(bridge.responseMode === "bridge_to_prerequisite" && bridge.prerequisiteAllowed === true && bridge.suspendedConcept === "명사와 대명사", "N: repeated failure allows nearest prerequisite");
+  check(direct.teachingLevel === 2 && direct.teachingStrategy === "COMPARE" && /명사는 이름.*대명사는 명사를 대신/.test(direct.teachingGoal ?? ""), "O: comparison teaching goal and default level");
+  const particleGoal = plan({ ...MODEL, learningRoute: null }, [{ role: "user", content: "조사가 뭐야?" }]);
+  check(particleGoal.teachingStrategy === "DIRECT_EXPLANATION" && /문법적 관계/.test(particleGoal.teachingGoal ?? ""), "P: particle definition teaching goal");
+  const pronounNeed = plan({ ...MODEL, learningRoute: null }, [{ role: "user", content: "왜 대명사가 필요해?" }]);
+  check(Boolean(pronounNeed.userIntent?.includes("necessity_request")) && /반복을 피하고/.test(pronounNeed.teachingGoal ?? ""), "Q: pronoun necessity teaching goal");
+  return 17;
 }

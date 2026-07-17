@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 
 const root = process.cwd();
-const devPages = ["prompt-test", "conversation-qa", "firebase", "knowledge", "readiness"].map((name) => ({
+const devPages = ["prompt-test", "conversation-qa", "firebase", "knowledge", "readiness", "sources", "releases", "import", "security"].map((name) => ({
   route: path.join(root, "src", "app", "dev", name, "page.tsx"),
   isolated: path.join(root, "src", "app", "dev", name, "page.development-only.tsx"),
 }));

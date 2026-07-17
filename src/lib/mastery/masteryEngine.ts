@@ -3,6 +3,7 @@ import {
   type MasteryEngineInput,
   type MasteryState,
 } from "./types";
+import { isStudentConceptMastered } from "@/lib/studentModel/studentModelEngine";
 
 const DAY_MS = 86_400_000;
 const SUCCESS_EVIDENCE = /적용|판별|근거|기준|이유|성공|새 예문|전이/;
@@ -86,11 +87,18 @@ export function calculateMastery(input: MasteryEngineInput): MasteryState {
     (profile) => profile.concept === input.conceptId && !profile.resolved,
   );
   if (unresolvedMisconception && masteryScore > 69) masteryScore = 69;
-  const mastered =
+  const canonicalMasterySatisfied = input.studentConceptState
+    ? isStudentConceptMastered(input.studentConceptState, unresolvedMisconception)
+    : null;
+  if (canonicalMasterySatisfied) masteryScore = Math.max(80, masteryScore);
+  const masteryFormulaSatisfied =
     masteryScore >= 80 &&
     confidence >= 0.75 &&
     correctStreak >= 2 &&
     !recentMisconception && !unresolvedMisconception;
+  const mastered = masteryFormulaSatisfied && (
+    canonicalMasterySatisfied ?? true
+  );
   const wasMastered = previous.masteredAt !== null;
   const wasDue =
     previous.nextReviewAt !== null && Date.parse(previous.nextReviewAt) <= Date.parse(now);

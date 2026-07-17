@@ -21,6 +21,7 @@ import { goalPrompt } from "@/lib/prompts/modules/goal";
 import { misconceptionLearningPrompt } from "@/lib/prompts/modules/misconceptionLearning";
 import { adaptivePrompt } from "@/lib/prompts/modules/adaptive";
 import { runtimePrompt } from "@/lib/prompts/modules/runtime";
+import { explanationStrategyPrompt } from "@/lib/prompts/modules/explanationStrategy";
 
 const systemPrompt = [
   basePrompt,
@@ -45,6 +46,7 @@ const systemPrompt = [
   misconceptionLearningPrompt,
   adaptivePrompt,
   tutorPersonaPrompt,
+  explanationStrategyPrompt,
   runtimePrompt,
 ].join("\n\n");
 

@@ -64,14 +64,9 @@ export const CONVERSATION_QA_SCENARIOS: ConversationQaScenario[] = [
     studentTurns: ["몰라", "모르겠어", "이해가 안 돼"], expected: { ...BASE_EXPECTATION, requiredFocusKeywords: ["두", "학생", "명사", "꾸며"] },
   },
   {
-    id: "H", title: "관련 없는 질문 후 Route 복귀", startQuestion: "수사와 수 관형사는 어떻게 구분해?",
+    id: "H", title: "명시적 범위 내 질문 우선", startQuestion: "수사와 수 관형사는 어떻게 구분해?",
     mode: "learn", goal: "concept", initialStudentModel: { currentConcept: "수사와 수 관형사", learningRoute: ROUTE_TO_NUMERAL },
-    studentTurns: ["형태소는 뭐야?", "잘 모르겠어"], expected: {
-      ...BASE_EXPECTATION,
-      activeConceptMustRemain: "수사와 수 관형사",
-      requiredFocusKeywords: ["두", "학생", "명사", "꾸미"],
-      maxAssistantSentences: 2,
-    },
+    studentTurns: ["형태소는 뭐야?", "잘 모르겠어"], expected: { ...BASE_EXPECTATION },
   },
   {
     id: "I", title: "명시적 새 주제 전환", startQuestion: "품사가 뭐야?",
@@ -98,24 +93,44 @@ export const CONVERSATION_QA_SCENARIOS: ConversationQaScenario[] = [
     studentTurns: [], expected: { ...BASE_EXPECTATION, mustUseProgress: true, mustNotRestorePreviousMessages: true },
   },
   {
-    id: "U", title: "연속 이해 불가 선택지 생명주기", startQuestion: "수사와 수 관형사는 어떻게 달라?",
+    id: "U", title: "연속 이해 불가 선택지 생명주기", startQuestion: "계속할게",
     mode: "learn", goal: "concept",
     initialStudentModel: { currentConcept: "형태소", learningRoute: { ...ROUTE_TO_NUMERAL, currentIndex: 0, completedConcepts: [] } },
     studentTurns: ["잘 모르겠어", "잘 모르겠어", "잘 모르겠어"],
     expected: { ...BASE_EXPECTATION, activeConceptMustRemain: "형태소", requiredFocusKeywords: ["학생", "들", "형태소"] },
   },
   {
-    id: "V", title: "세 번째 힌트 정답 후 다음 Route", startQuestion: "수사와 수 관형사는 어떻게 달라?",
+    id: "V", title: "세 번째 힌트 정답 후 다음 Route", startQuestion: "계속할게",
     mode: "learn", goal: "concept",
     initialStudentModel: { currentConcept: "형태소", learningRoute: { ...ROUTE_TO_NUMERAL, currentIndex: 0, completedConcepts: [] } },
     studentTurns: ["잘 모르겠어", "잘 모르겠어", "잘 모르겠어", "학생 + 들"],
     expected: { ...BASE_EXPECTATION },
   },
   {
-    id: "W", title: "형태소 직접 입력 후 다음 Route", startQuestion: "수사와 수 관형사는 어떻게 달라?",
+    id: "W", title: "형태소 직접 입력 후 다음 Route", startQuestion: "계속할게",
     mode: "learn", goal: "concept",
     initialStudentModel: { currentConcept: "형태소", learningRoute: { ...ROUTE_TO_NUMERAL, currentIndex: 0, completedConcepts: [] } },
     studentTurns: ["학생하고 들"],
     expected: { ...BASE_EXPECTATION },
+  },
+  {
+    id: "X", title: "명사·대명사 비교 Teaching Goal", startQuestion: "명사와 대명사의 차이를 알려줘.",
+    mode: "learn", goal: "concept", studentTurns: [],
+    expected: { ...BASE_EXPECTATION, expectedTeachingStrategy: "COMPARE", teachingGoalPattern: /명사는 이름.*대명사는 명사를 대신/ },
+  },
+  {
+    id: "Y", title: "조사 정의 Teaching Goal", startQuestion: "조사가 뭐야?",
+    mode: "learn", goal: "concept", studentTurns: [],
+    expected: { ...BASE_EXPECTATION, expectedTeachingStrategy: "DIRECT_EXPLANATION", teachingGoalPattern: /문법적 관계/ },
+  },
+  {
+    id: "Z", title: "대명사 필요성 Teaching Goal", startQuestion: "왜 대명사가 필요해?",
+    mode: "learn", goal: "concept", studentTurns: [],
+    expected: { ...BASE_EXPECTATION, expectedTeachingStrategy: "DIRECT_EXPLANATION", teachingGoalPattern: /반복을 피하고/ },
+  },
+  {
+    id: "AA", title: "Student Model 설명 이력 반영", startQuestion: "명사와 대명사의 차이를 알려줘.",
+    mode: "learn", goal: "concept", studentTurns: ["명사와 대명사의 차이를 다시 알려줘."],
+    expected: { ...BASE_EXPECTATION, expectedTeachingStrategy: "COMPARE", teachingGoalPattern: /명사는 이름.*대명사는 명사를 대신/ },
   },
 ];

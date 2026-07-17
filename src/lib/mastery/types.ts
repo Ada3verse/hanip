@@ -1,5 +1,6 @@
 import type { AiEvaluation } from "@/lib/types/chat";
 import type { MisconceptionProfile } from "@/lib/misconceptionLearning/types";
+import type { StudentConceptState } from "@/lib/studentModel/types";
 
 export const MASTERY_REVIEW_INTERVALS = [1, 3, 7, 14, 30] as const;
 
@@ -26,4 +27,5 @@ export interface MasteryEngineInput {
   now?: string;
   workedExampleSuccess?: boolean;
   misconceptionProfiles?: readonly MisconceptionProfile[];
+  studentConceptState?: StudentConceptState;
 }

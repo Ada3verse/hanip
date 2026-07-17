@@ -44,7 +44,7 @@ export function runHintEngineLocalTests() {
   const dialoguePlan = createDialoguePlan({ learningState, studentModel: { currentConcept: "수사와 수 관형사", lastEvaluation: "unknown" }, messages: [{ role: "user", content: "모르겠어" }] });
   check(dialoguePlan.hintLevel === 3 && dialoguePlan.hintType === "core_criterion" && dialoguePlan.action === "explain", "P Dialogue integration");
   const retrieval = retrieveKnowledge({ dialoguePlan, recentStudentMessage: "모르겠어" });
-  check(retrieval.usedEvidence.length > 0 && retrieval.usedEvidence.every(({ role }) => role === "definition"), "Q retrieval level evidence");
+  check(retrieval.usedEvidence.length > 0 && retrieval.knowledgeFound && retrieval.usedEvidence.every(({ role }) => ["definition", "example", "teacher_strategy", "misconception"].includes(role)), "Q retrieval level evidence");
   const earlyReveal = next("apply_fail", level2);
   check(earlyReveal.hintLevel < 5 && earlyReveal.lastHintType !== "answer_reveal", "R no early answer reveal");
 }

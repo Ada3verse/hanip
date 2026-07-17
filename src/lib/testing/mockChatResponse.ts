@@ -15,6 +15,7 @@ import {
   createInitialHintState,
 } from "@/lib/hint/hintEngine";
 import {
+  classifyUserIntent,
   createDialoguePlan,
   isExplicitTopicChange,
   type InterruptionState,
@@ -54,6 +55,160 @@ import {
   createAdaptiveTurnStrategy,
   inferAdaptiveProfile,
 } from "@/lib/adaptive/adaptiveEngine";
+import {
+  createEmptyRuntimeStudentModel,
+  getStudentConceptState,
+  hasUsedExplanation,
+  recordExplanation,
+  updateRuntimeStudentModel,
+} from "@/lib/studentModel/studentModelEngine";
+import { renderMockExplanation, selectExplanationPlan } from "@/lib/explanation/explanationStrategy";
+
+const DIRECT_NOUN_PRONOUN_PATTERN = /명사.*대명사|대명사.*명사/;
+const CONFUSION_PATTERN = /잘\s*모르|모르겠|이해가\s*안|무슨\s*말|헷갈|아직도\s*모르|^아니[요]?$/;
+
+function findOriginalExplicitQuestion(request: ChatApiRequest) {
+  return request.messages.find(({ role, content }) =>
+    role === "user" && classifyUserIntent(content).some((intent) =>
+      ["explain_request", "compare_request", "example_request", "definition_request"].includes(intent),
+    ),
+  )?.content ?? "";
+}
+
+function repliesForTeachingStrategy(strategy: string | undefined) {
+  if (strategy === "COMPARE") return ["차이를 알겠어", "예문을 더 보고 싶어", "잘 모르겠어"];
+  if (strategy === "EXAMPLE") return ["예를 만들어 볼래", "예문을 더 보고 싶어", "아직 헷갈려"];
+  if (strategy === "QUIZ") return ["문제 풀어볼래", "한 번 더 설명해줘", "아직 모르겠어"];
+  if (strategy === "GUIDED_DISCOVERY") return ["힌트를 따라가 볼래", "더 쉬운 예가 필요해", "아직 모르겠어"];
+  return ["이해했어", "다른 예도 보고 싶어", "잘 모르겠어"];
+}
+
+function applyDirectAnswerFirst(response: ChatApiResponse, request: ChatApiRequest) {
+  const users = request.messages.filter(({ role }) => role === "user");
+  const lastUser = users.at(-1)?.content.trim() ?? "";
+  const originalQuestion = findOriginalExplicitQuestion(request);
+  const nounPronounRequest = DIRECT_NOUN_PRONOUN_PATTERN.test(lastUser);
+  const usedNounPronounExample = hasUsedExplanation(
+    request.studentModel?.studentProfile,
+    "명사와 대명사",
+    /민지/,
+  ) || Boolean(request.studentModel?.studentProfile?.explanationHistory.some(({ conceptId }) => conceptId === "명사와 대명사"));
+  const confusion = CONFUSION_PATTERN.test(lastUser);
+  const failureCount = Math.max(
+    request.studentModel?.consecutiveUnknownResponses ?? 0,
+    users.slice(1).filter(({ content }) => CONFUSION_PATTERN.test(content)).length,
+  );
+  const bridgeWasGiven = request.messages.some(({ role, content }) =>
+    role === "assistant" && /명사와 대명사를 이해하려면.*품사|먼저 품사/.test(content),
+  );
+
+  if (/오늘\s*날씨|날씨\s*(?:어때|알려)/.test(lastUser)) {
+    response.message = "날씨는 한잎의 국어 문법 학습 범위 밖이라 정확히 알려 주기 어려워. 하던 문법 질문으로 돌아갈까?";
+    response.suggestedReplies = ["문법 학습 계속하기", "다른 문법 질문하기"];
+    return;
+  }
+  if (/수사/.test(lastUser) && /(?:수\s*)?관형사/.test(lastUser) && /구분|차이|달라|어떻게/.test(lastUser)) {
+    const strategy = response.meta?.strategy;
+    const lead = strategy === "challenge"
+      ? "차이를 짧게 정리한 뒤 **새 문장에 적용**해 보자. "
+      : strategy === "guide"
+        ? "대표 **예문에서 판단 기준과 이유**를 함께 확인해 보자. "
+      : strategy === "review"
+        ? "**이전에 헷갈렸던 기준**을 다른 예시로 다시 확인해 볼게. "
+        : strategy === "mastery"
+          ? "핵심 차이를 확인한 뒤 **교과서 수준의 새 문장에 적용**해 보자. "
+          : "";
+    const example = strategy === "review" ? "‘사과 하나’와 ‘한 사과’" : "‘학생이 둘 왔다’와 ‘두 학생이 왔다’";
+    response.message = `${lead}**수사**는 문장에서 체언 자리를 차지하고 조사가 붙을 수 있지만, **수 관형사**는 뒤의 명사를 직접 꾸며. ${example}에서 뒤의 명사를 직접 꾸미는 말은 어느 쪽일까?`;
+    response.suggestedReplies = strategy === "review" ? ["한", "하나", "잘 모르겠어"] : ["두", "둘", "잘 모르겠어"];
+  } else if (nounPronounRequest) {
+    response.message = usedNounPronounExample
+      ? "같은 내용을 다른 예로 볼게. **명사**는 이름을 직접 나타내고, **대명사**는 그 이름을 대신해. ‘선생님이 오셨다’와 ‘그분이 오셨다’에서 이름을 대신하는 말은 무엇일까?"
+      : /예문|예시/.test(lastUser)
+      ? "명사는 사람·사물·장소 등의 **이름을 직접 나타내는 말**이고, 대명사는 그런 명사를 **대신하는 말**이야.\n\n1. 민지는 책을 읽었다. → ‘민지’는 사람의 이름을 나타내는 명사야.\n2. 그는 책을 읽었다. → ‘그’는 ‘민지’를 대신하는 대명사야.\n\n둘의 가장 큰 차이를 한 문장으로 말해 볼래?"
+      : "**명사**는 이름을 직접 나타내고, **대명사**는 이미 나온 명사를 대신하는 말이야. ‘민지가 왔다’와 ‘그가 왔다’에서 ‘그’는 ‘민지’를 대신해. 둘의 가장 큰 차이를 한 문장으로 말해 볼래?";
+    response.suggestedReplies = usedNounPronounExample
+      ? ["그분", "선생님", "잘 모르겠어"]
+      : ["차이가 보여", "예문을 더 보고 싶어", "아직 헷갈려"];
+  } else if (/대명사/.test(lastUser) && /왜[^?？]{0,20}필요|필요한\s*이유/.test(lastUser)) {
+    response.message = "**대명사**는 이미 나온 명사를 반복하지 않고 대신 가리키기 위해 필요해. ‘민지는 책을 읽고, 그는 웃었다’에서 ‘그’는 앞의 민지를 대신해. 그럼 ‘그’는 왜 대명사일까?";
+    response.suggestedReplies = ["민지를 대신하기 때문이야", "사람 이름이기 때문이야", "아직 헷갈려"];
+  } else if (confusion && DIRECT_NOUN_PRONOUN_PATTERN.test(originalQuestion) && failureCount < 2) {
+    response.message = "더 쉽게 말하면 **명사**는 이름을 직접 말하고, **대명사**는 이미 나온 이름을 대신해. ‘지우가 웃었다’의 ‘지우’와 ‘그가 웃었다’의 ‘그’를 비교하면, 이름을 대신하는 말은 어느 쪽일까?";
+    response.suggestedReplies = ["그", "지우", "아직 헷갈려"];
+  } else if (confusion && DIRECT_NOUN_PRONOUN_PATTERN.test(originalQuestion) && failureCount >= 2) {
+    response.message = "명사와 대명사의 차이를 보려면 둘이 모두 **품사**, 즉 단어의 종류라는 점을 먼저 확인하면 좋아. ‘민지’와 ‘그’는 둘 다 사람을 가리키는 단어라고 볼 수 있을까?";
+    response.suggestedReplies = ["둘 다 사람을 가리켜", "한쪽만 사람을 가리켜", "잘 모르겠어"];
+  } else if (bridgeWasGiven && DIRECT_NOUN_PRONOUN_PATTERN.test(originalQuestion) && !confusion) {
+    response.message = "품사가 단어의 종류라는 점을 확인했으니 원래 질문으로 돌아갈게. **명사**는 이름을 직접 나타내고 **대명사**는 그 이름을 대신해. ‘민지가 왔다’와 ‘그가 왔다’에서 이름을 대신하는 말은 무엇일까?";
+    response.suggestedReplies = ["그", "민지", "잘 모르겠어"];
+  } else if (/형태소(?:가|는)?\s*(?:뭐|무엇)/.test(lastUser)) {
+    response.message = "**형태소**는 뜻을 가진 가장 작은 말의 단위야. 예를 들어 ‘학생들’은 사람을 뜻하는 ‘학생’과 여럿을 뜻하는 ‘들’로 나눌 수 있어. ‘학생들’에서 여럿이라는 뜻을 더하는 부분은 무엇일까?";
+    response.suggestedReplies = ["들", "학생", "아직 헷갈려"];
+  } else if (confusion && /형태소/.test(originalQuestion) && failureCount < 2) {
+    response.message = "더 쉽게 보면, 긴 말을 뜻이 있는 작은 조각으로 나눈 것이 형태소야. ‘책들’에서 책을 뜻하는 ‘책’과 여럿을 뜻하는 ‘들’ 중 여럿을 더하는 조각은 어느 말일까?";
+    response.suggestedReplies = ["들", "책", "아직 헷갈려"];
+  } else if (/품사가?\s*(?:뭐|무엇)/.test(lastUser)) {
+    const progressLead = request.studentModel?.priorProgressLoaded
+      ? request.studentModel.priorConceptStatus === "needs_review"
+        ? "전에 헷갈렸던 내용을 참고해 바로 핵심부터 보면, "
+        : "이전에 공부한 내용을 바탕으로 바로 핵심부터 보면, "
+      : "";
+    if ((request.learningGoal ?? request.studentModel?.learningGoal) === "exam") {
+      response.message = "**품사**는 단어를 문법적 성질에 따라 나눈 갈래야. 시험에서는 뜻만 보고 같은 품사라고 고르는 **함정**을 자주 헷갈려. ‘사람’과 ‘학생’은 뜻이 비슷하다는 이유만으로 품사가 같다고 판단해도 될까?";
+      response.suggestedReplies = ["뜻만으로는 부족해", "뜻만 보면 돼", "잘 모르겠어"];
+    } else if ((request.learningGoal ?? request.studentModel?.learningGoal) === "practice") {
+      response.message = "**품사**는 단어의 문법적 종류야. 바로 새 예문에 적용해 보자. ‘새 가방을 샀다’에서 ‘새’는 어느 품사일까?";
+      response.suggestedReplies = ["관형사", "명사", "잘 모르겠어"];
+    } else {
+      response.message = `${progressLead}**품사**는 단어를 형태·기능·의미 같은 문법적 성질에 따라 나눈 갈래야. 예를 들어 ‘사람’, ‘예쁘다’, ‘빨리’는 문법적 성질이 달라 서로 다른 품사로 나눠. 세 단어가 서로 다른 종류라는 점은 이해되니?`;
+      response.suggestedReplies = request.studentModel?.priorProgressLoaded
+        ? ["형태", "기능", "의미", "잘 모르겠어"]
+        : ["이해돼", "기준을 더 알고 싶어", "잘 모르겠어"];
+    }
+  } else if (/조사는?\s*왜\s*단어/.test(lastUser)) {
+    response.message = "조사는 혼자 쓰이기 어렵지만 체언 뒤에 붙어 다른 말과의 **문법적 관계**를 나타내는 하나의 품사라서 단어로 인정해. ‘학생이’에서 ‘이’는 ‘학생’이 문장의 주어임을 나타내지. 이 설명 뒤에 하던 학습으로 돌아갈까?";
+    response.suggestedReplies = ["하던 학습으로 돌아갈래", "조사를 더 알고 싶어"];
+  } else if (/조사(?:가|는)?\s*(?:뭐|무엇)/.test(lastUser)) {
+    response.message = "**조사**는 주로 체언 뒤에 붙어 그 말과 다른 말의 문법적 관계를 나타내는 단어야. ‘학생이 웃는다’에서 ‘이’는 ‘학생’이 주어임을 드러내. 그럼 ‘학생이’에서 문법적 관계를 나타내는 말은 무엇일까?";
+    response.suggestedReplies = ["이", "학생", "아직 헷갈려"];
+  } else {
+    return;
+  }
+
+  if (response.meta?.dialoguePlan) {
+    const plan = response.meta.dialoguePlan;
+    if (plan.directAnswerRequired) response.meta.concept = plan.activeConcept;
+    if (nounPronounRequest) {
+      plan.activeConcept = "명사와 대명사";
+      plan.action = "explain";
+      plan.responseMode = "direct_answer_then_check";
+      plan.directAnswerRequired = true;
+      plan.requestedExampleCount = /예문|예시/.test(lastUser) ? 2 : 0;
+      plan.requestedComparisonTargets = ["명사", "대명사"];
+    } else if (confusion && DIRECT_NOUN_PRONOUN_PATTERN.test(originalQuestion)) {
+      plan.activeConcept = "명사와 대명사";
+      plan.action = failureCount >= 2 ? "bridge" : "explain";
+      plan.responseMode = failureCount >= 2 ? "bridge_to_prerequisite" : "same_concept_reexplain";
+      plan.prerequisiteAllowed = failureCount >= 2;
+      plan.originalQuestion = originalQuestion;
+      plan.suspendedConcept = failureCount >= 2 ? "명사와 대명사" : null;
+    }
+    const asksWhyPronounIsNeeded = /대명사/.test(lastUser)
+      && /왜[^?？]{0,20}필요|필요한\s*이유/.test(lastUser);
+    if (plan.directAnswerRequired && !request.studentModel?.priorProgressLoaded && !asksWhyPronounIsNeeded && !usedNounPronounExample) {
+      response.suggestedReplies = repliesForTeachingStrategy(plan.teachingStrategy);
+    }
+  }
+  const previousHintLevel = Math.max(
+    0,
+    ...Object.values(request.studentModel?.hintStates ?? {}).map(({ hintLevel }) => hintLevel),
+  );
+  if (response.meta?.hintState && response.meta.hintState.hintLevel > previousHintLevel + 1) {
+    response.meta.hintState.hintLevel = Math.min(5, previousHintLevel + 1) as typeof response.meta.hintState.hintLevel;
+    if (response.meta.learningState?.hint) response.meta.learningState.hint.hintLevel = response.meta.hintState.hintLevel;
+  }
+}
 
 export function getConceptQuestionAndReplies(
   conceptId: string,
@@ -714,6 +869,8 @@ export function createMockChatResponseEngine(request: ChatApiRequest): ChatApiRe
       recentStudentMessage,
       conversationMessages: request.messages.map(({ content }) => content),
       misconceptionProfiles: request.studentModel?.misconceptionProfiles,
+      currentGoal: request.studentModel?.goalState?.currentGoal,
+      currentMission: request.studentModel?.goalState?.missionDescription,
     });
     const adaptiveProfileForTurn = inferAdaptiveProfile({
       concept: preliminaryPlan.activeConcept,
@@ -728,6 +885,7 @@ export function createMockChatResponseEngine(request: ChatApiRequest): ChatApiRe
       workedExamples: Object.values(request.studentModel?.workedExampleStates ?? {}),
       masteryStates: Object.values(request.studentModel?.masteryStates ?? {}),
       previous: request.studentModel?.adaptiveProfile,
+      studentConceptState: getStudentConceptState(request.studentModel?.studentProfile, preliminaryPlan.activeConcept),
     });
     const adaptiveStrategy = createAdaptiveTurnStrategy(adaptiveProfileForTurn);
     const knowledge = findRelevantKnowledge(
@@ -755,6 +913,23 @@ export function createMockChatResponseEngine(request: ChatApiRequest): ChatApiRe
     const masteryConceptId =
       inferLearningConceptId(preliminaryPlan.activeConcept) ??
       preliminaryPlan.activeConcept;
+    const studentProfile = answerEvaluation.reason.some((reason) =>
+      reason === "student_question_not_answer" || reason === "non_answer_question_carry_forward"
+    )
+      ? request.studentModel?.studentProfile
+      : updateRuntimeStudentModel({
+          previous: request.studentModel?.studentProfile,
+          studentAnswer: recentStudentMessage,
+          concept: preliminaryPlan.activeConcept,
+          evaluation: answerEvaluation.evaluation,
+          matchedMisconceptions: answerEvaluation.matchedMisconceptions,
+          hasUnresolvedMisconception: Boolean(
+            answerEvaluation.matchedMisconceptions.length ||
+            request.studentModel?.misconceptionProfiles?.some(({ resolved, concept }) =>
+              !resolved && (concept === preliminaryPlan.activeConcept || concept === masteryConceptId),
+            ),
+          ),
+        });
     const misconceptionProfiles = updateMisconceptionProfiles({
       concept: masteryConceptId,
       evaluation: answerEvaluation.evaluation,
@@ -771,7 +946,7 @@ export function createMockChatResponseEngine(request: ChatApiRequest): ChatApiRe
       misconceptionProfiles,
       masteryConceptId,
     );
-    const previousMastery = request.learningProgress?.concepts.find(
+    const previousMastery = request.studentModel?.masteryStates?.[masteryConceptId] ?? request.learningProgress?.concepts.find(
       ({ conceptId, conceptName }) =>
         conceptId === masteryConceptId ||
         inferLearningConceptId(conceptName) === masteryConceptId,
@@ -791,6 +966,9 @@ export function createMockChatResponseEngine(request: ChatApiRequest): ChatApiRe
           (state) => !state.completedExample,
         )) && answerEvaluation.evaluation === "correct",
       misconceptionProfiles,
+      studentConceptState: request.studentModel?.studentProfile
+        ? getStudentConceptState(studentProfile, preliminaryPlan.activeConcept)
+        : undefined,
     });
     const legacyHintLevel =
       (request.studentModel?.consecutiveUnknownResponses ?? 0) > 0 &&
@@ -831,6 +1009,7 @@ export function createMockChatResponseEngine(request: ChatApiRequest): ChatApiRe
           ...answerEvaluation.matchedMisconceptions,
         ]),
       ],
+      studentProfile,
     };
     const learningState = calculateLearningState({
       studentModel: evaluatedStudentModel,
@@ -891,6 +1070,8 @@ export function createMockChatResponseEngine(request: ChatApiRequest): ChatApiRe
       conversationMessages: request.messages.map(({ content }) => content),
       workedExampleState: previousWorkedExample,
       misconceptionProfiles,
+      currentGoal: request.studentModel?.goalState?.currentGoal,
+      currentMission: request.studentModel?.goalState?.missionDescription,
     });
     const lastAssistantQuestion = [...request.messages]
       .reverse()
@@ -935,6 +1116,7 @@ export function createMockChatResponseEngine(request: ChatApiRequest): ChatApiRe
       ],
       masteryStates: [...Object.values(request.studentModel?.masteryStates ?? {}), mastery],
       previous: request.studentModel?.adaptiveProfile,
+      studentConceptState: getStudentConceptState(studentProfile, preliminaryPlan.activeConcept),
     });
     learningState.adaptive = adaptiveProfile;
     if (workedExampleState) {
@@ -1041,7 +1223,13 @@ export function createMockChatResponseEngine(request: ChatApiRequest): ChatApiRe
       conversationMessages: request.messages.map(({ content }) => content),
       workedExampleState,
       misconceptionProfiles,
+      currentGoal: goalState.currentGoal,
+      currentMission: goalState.missionDescription,
     }));
+    if (response.meta.retrieval.reason.includes("knowledge_not_found")) {
+      response.message = "이 질문은 현재 품사 Knowledge에 없어 문법 학습 범위 밖이야. 등록된 품사 내용 안에서 질문해 줘.";
+      response.suggestedReplies = [];
+    }
     const route = request.studentModel?.learningRoute;
     const activeConceptId =
       route?.route[route.currentIndex] ??
@@ -1063,13 +1251,48 @@ export function createMockChatResponseEngine(request: ChatApiRequest): ChatApiRe
         request.messages,
       );
     }
+    applyDirectAnswerFirst(response, request);
+    const plan = response.meta.dialoguePlan;
+    const explanationConcept = plan?.activeConcept ?? response.meta.concept;
+    const conceptState = getStudentConceptState(
+      studentProfile ?? request.studentModel?.studentProfile,
+      explanationConcept,
+    );
+    const explanationPlan = selectExplanationPlan({
+      concept: explanationConcept,
+      confidence: conceptState.confidence,
+      understandingLevel: conceptState.understandingLevel,
+      misconception: conceptState.misconceptionSummary,
+      consecutiveFailures: conceptState.consecutiveFailures,
+      history: (studentProfile ?? request.studentModel?.studentProfile)?.explanationHistory ?? [],
+    });
+    response.meta.explanationPlan = explanationPlan;
+    if (plan) plan.explanationPlan = explanationPlan;
+    const conceptRequests = request.messages.filter(({ role, content }) =>
+      role === "user" && classifyUserIntent(content).some((intent) =>
+        ["explain_request", "compare_request", "definition_request", "example_request"].includes(intent),
+      ) && (inferDependencyConceptId(content) === inferDependencyConceptId(explanationConcept) ||
+        (DIRECT_NOUN_PRONOUN_PATTERN.test(content) && explanationConcept === "명사와 대명사")),
+    ).length;
+    if (!isSessionEndIntent(recentStudentMessage) &&
+      !request.studentModel?.learningRoute &&
+      !request.studentModel?.activePrerequisite &&
+      (response.meta.hintLevelUsed ?? 0) < 3 &&
+      (conceptRequests >= 2 || (plan?.responseMode === "same_concept_reexplain" && CONFUSION_PATTERN.test(recentStudentMessage) && conceptState.consecutiveFailures >= 1))) {
+      response.message = renderMockExplanation(explanationPlan);
+      response.suggestedReplies = explanationPlan.strategy === "fill_blank"
+        ? ["이름을 직접 나타내기", "이름을 대신하기", "잘 모르겠어"]
+        : explanationPlan.depth >= 4 ? [] : response.suggestedReplies;
+    }
     const previousAssistant = [...request.messages]
       .reverse()
       .find(({ role }) => role === "assistant")?.content.trim() ?? "";
     if (
       !isSessionEndIntent(recentStudentMessage) && (response.message.trim() === previousAssistant ||
       (previousAssistant.length >= 12 &&
-        response.message.trim().startsWith(previousAssistant.slice(0, 12))))
+        response.message.trim().startsWith(previousAssistant.slice(0, 12))) ||
+      (previousAssistant.replace(/[‘’'"\s]/g, "").slice(-24) ===
+        response.message.replace(/[‘’'"\s]/g, "").slice(-24)))
     ) {
       const alternate = activeConceptId === "word"
         ? {
@@ -1085,6 +1308,16 @@ export function createMockChatResponseEngine(request: ChatApiRequest): ChatApiRe
       response.message = alternate.question;
       response.suggestedReplies = alternate.replies;
     }
+    const finalStudentProfile = recordExplanation({
+      model: studentProfile ?? request.studentModel?.studentProfile ?? createEmptyRuntimeStudentModel(),
+      concept: plan?.activeConcept ?? response.meta.concept,
+      strategy: plan?.teachingStrategy ?? "DIRECT_EXPLANATION",
+      explanationStrategy: explanationPlan.strategy,
+      exampleIds: explanationPlan.exampleId ? [explanationPlan.exampleId] : [],
+      message: response.message,
+    });
+    response.meta.studentModel = finalStudentProfile;
+    if (plan) plan.studentModel = finalStudentProfile;
   }
   return response;
 }

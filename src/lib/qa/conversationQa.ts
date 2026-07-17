@@ -4,6 +4,8 @@ import { createMockChatResponse } from "@/lib/testing/mockChatResponse";
 import type { ChatMessage, StudentResponseMode, StudentSessionModel } from "@/lib/types/chat";
 import { isMastered } from "@/lib/mastery/masteryEngine";
 import { inferLearningConceptId } from "@/lib/learningState/learningStateEngine";
+import { classifyUserIntent } from "@/lib/dialogue/dialoguePlanner";
+import { getStudentConceptState, isStudentConceptMastered } from "@/lib/studentModel/studentModelEngine";
 import type {
   ConversationQaIssue,
   ConversationQaResult,
@@ -32,6 +34,58 @@ const FAIL_CODES = new Set([
   "ADAPTIVE_PROFILE_MISSING", "ADAPTIVE_OVER_PERSONALIZED",
   "ADAPTIVE_HINT_CONFLICT", "ADAPTIVE_WORKED_EXAMPLE_CONFLICT",
   "ADAPTIVE_EVALUATION_CONFLICT", "ADAPTIVE_MASTERY_INFLUENCE",
+  "DIRECT_ANSWER_SKIPPED", "PREMATURE_PREREQUISITE_JUMP",
+  "REQUESTED_EXAMPLE_COUNT_IGNORED", "USER_INTENT_OVERRIDDEN_BY_ROUTE",
+  "ORIGINAL_QUESTION_NOT_RESUMED", "SAME_CONCEPT_REEXPLANATION_SKIPPED",
+  "IRRELEVANT_DIAGNOSTIC_QUESTION", "IDENTICAL_SUGGESTED_REPLIES_REPEATED",
+  "TEACHING_GOAL_MISSING", "TEACHING_STRATEGY_MISSING", "TEACHING_LEVEL_INVALID",
+  "STUDENT_MODEL_NOT_PERSISTED", "STUDENT_MODEL_CONCEPT_COLLISION",
+  "DUPLICATE_UNDERSTANDING_SOURCE", "MASTERY_STATE_CONFLICT",
+  "ADAPTIVE_STATE_CONFLICT", "EXPLANATION_HISTORY_LOST",
+  "EXPLANATION_HISTORY_UNBOUNDED", "PREMATURE_MASTERY",
+  "STUDENT_MODEL_MIGRATION_LOSS", "NEW_SESSION_ERASED_LONG_TERM_MODEL",
+  "RESET_PRESERVED_STUDENT_MODEL",
+  "KNOWLEDGE_PACK_REQUIRED_FIELD_MISSING", "KNOWLEDGE_PACK_DUPLICATE_CONCEPT",
+  "KNOWLEDGE_PACK_PREREQUISITE_CYCLE", "KNOWLEDGE_PACK_SOURCE_MISSING",
+  "UNVERIFIED_CONTENT_USED_IN_PRODUCTION", "COPYRIGHT_RISK_LONG_SOURCE_COPY",
+  "DUPLICATE_EXAMPLE", "KNOWLEDGE_COVERAGE_INSUFFICIENT",
+  "FULL_PACK_INJECTED_IN_PROMPT", "INTERNAL_PROVENANCE_EXPOSED",
+  "RAW_SOURCE_AUTO_VERIFIED",
+  "SOURCE_FILE_EXPOSED", "SOURCE_PATH_EXPOSED", "UNSUPPORTED_DOCUMENT_ACCEPTED",
+  "CORRUPTED_PDF_NOT_REJECTED", "ENCRYPTED_PDF_NOT_REJECTED", "RAW_TEXT_MUTATED",
+  "SOURCE_CHUNK_PAGE_RANGE_LOST", "REVIEW_SKIPPED", "UNREVIEWED_CONTENT_IMPORTED",
+  "VERIFIED_CONTENT_OVERWRITTEN", "CONTENT_CONFLICT_IGNORED",
+  "OCR_REQUIRED_NOT_REPORTED", "FULL_DOCUMENT_LOGGED", "SOURCE_DEV_ROUTE_EXPOSED",
+  "INVALID_PACK_STATUS_TRANSITION", "SELF_REVIEW_APPROVED",
+  "REVIEW_CHECKLIST_BYPASSED", "UNRESOLVED_CONFLICT_PUBLISHED",
+  "INCOMPLETE_COVERAGE_VERIFIED", "UNVERIFIED_PACK_RELEASED",
+  "RELEASE_SNAPSHOT_MUTATED", "UNPUBLISHED_RELEASE_USED",
+  "SESSION_RELEASE_CHANGED", "CONCEPT_MIGRATION_MISSING",
+  "STUDENT_MODEL_LOST_ON_RELEASE", "ROLLBACK_DATA_DELETED",
+  "AUDIT_EVENT_MISSING", "SENSITIVE_DATA_IN_AUDIT_LOG",
+  "RELEASE_DEV_ROUTE_EXPOSED",
+  "IMPORT_WIZARD_STEP_BYPASSED", "IMPORT_WIZARD_STATE_LOST",
+  "IMPORT_WIZARD_DOCUMENT_MIXED", "RAW_TEXT_EDITED",
+  "CHUNK_PROVENANCE_LOST", "PENDING_REVIEW_IMPORTED",
+  "VERIFIED_CONTENT_OVERWRITTEN", "VALIDATION_GATE_BYPASSED",
+  "VERIFICATION_GATE_BYPASSED", "RELEASE_CANDIDATE_MUTATED",
+  "IMPORT_DEV_ROUTE_EXPOSED", "IMPORT_INTERNAL_DATA_EXPOSED",
+  "MOCK_MODE_CALLED_OPENAI", "LIVE_TEST_CALLED_AUTOMATICALLY",
+  "DUPLICATE_OPENAI_REQUEST", "OPENAI_CALLED_WITHOUT_KNOWLEDGE",
+  "FULL_KNOWLEDGE_PACK_IN_PROMPT", "INTERNAL_PROVENANCE_IN_PROMPT",
+  "API_KEY_EXPOSED", "PROVIDER_FAILURE_MASKED_AS_MOCK",
+  "STUDENT_QUESTION_NOT_ANSWERED", "RETRIEVAL_EVIDENCE_IGNORED",
+  "TEXTBOOK_LONG_COPY", "LIVE_DEV_ROUTE_EXPOSED",
+  "UNAUTHENTICATED_CHAT_ACCESS", "PIN_STORED_IN_PLAINTEXT",
+  "PIN_EXPOSED_IN_LOG", "PIN_BRUTE_FORCE_UNPROTECTED",
+  "ACCOUNT_ENUMERATION", "SESSION_COOKIE_INSECURE", "SESSION_NOT_REVOKED",
+  "CROSS_USER_DATA_ACCESS", "CLIENT_ROLE_ESCALATION", "FIRESTORE_OWNER_CHECK_MISSING",
+  "REQUIRED_CONSENT_BYPASSED", "OPTIONAL_CONSENT_FORCED",
+  "PRIVACY_POLICY_MISSING", "TERMS_MISSING", "PRIVACY_RETENTION_MISMATCH",
+  "CONVERSATION_LOGGED_IN_PLAINTEXT", "PERSONAL_DATA_SENT_TO_ANALYTICS",
+  "PERSONAL_DATA_INPUT_UNGUARDED", "DATA_DELETION_UNSUPPORTED",
+  "ADMIN_ACCESS_NOT_AUDITED", "XSS_INPUT_RENDERED", "CSRF_PROTECTION_MISSING",
+  "SECURITY_HEADER_MISSING", "SECRET_EXPOSED", "DEV_AUTH_BYPASS_EXPOSED",
 ]);
 const WARNING_CODES = new Set([
   "QUESTION_AMBIGUOUS", "REQUIRED_FOCUS_MISSING", "REPEATED_OPENING",
@@ -40,7 +94,7 @@ const WARNING_CODES = new Set([
   "SUGGESTED_REPLY_MISMATCH", "REPEATED_RESPONSE_PATTERN",
   "ADAPTIVE_HINT_REPEATED",
 ]);
-const INTERNAL_PATTERN = /Learning\s*State|Student\s*Model|Hint\s*Level|힌트\s*레벨|평가\s*결과|학습\s*전략|tutorStrategy|dialoguePlan|learningStyle|internalScore|adaptiveReason|decisionLog/i;
+const INTERNAL_PATTERN = /Learning\s*State|Student\s*Model|Hint\s*Level|힌트\s*레벨|평가\s*결과|학습\s*전략|tutorStrategy|dialoguePlan|learningStyle|internalScore|adaptiveReason|decisionLog|sourceId|documentId|pageRange|chunkId|verificationStatus/i;
 const AMBIGUOUS_PATTERN = /어떻게 생각해\?|무엇을 알고 있어\?|이 질문에서 가장 궁금한 말은 무엇이야\?|다시 생각해 볼까\?/;
 
 function emptyModel(scenario: ConversationQaScenario): StudentSessionModel {
@@ -70,7 +124,7 @@ function sentenceCount(message: string) {
 }
 
 export function inspectConversationQaTurn({
-  scenario, issues, turn, response, previousResponse, previousReplies, previousHintLevel, previousAdaptiveHintLevel, previousHintType, previousWorkedExampleStep, previousGoal, studentInput,
+  scenario, issues, turn, response, previousResponse, previousReplies, previousHintLevel, previousAdaptiveHintLevel, previousHintType, previousDialogueResponseMode, previousWorkedExampleStep, previousGoal, previousStudentHistoryCount, studentInput,
 }: {
   scenario: ConversationQaScenario;
   issues: ConversationQaIssue[];
@@ -81,8 +135,10 @@ export function inspectConversationQaTurn({
   previousHintLevel?: number;
   previousAdaptiveHintLevel?: number;
   previousHintType?: string;
+  previousDialogueResponseMode?: string;
   previousWorkedExampleStep?: number;
   previousGoal?: { currentGoal: string; goalProgress: number };
+  previousStudentHistoryCount?: number;
   studentInput?: string;
 }) {
   const message = response.message;
@@ -106,6 +162,7 @@ export function inspectConversationQaTurn({
     }
     if (
       adaptiveStrategy.hintPacing === "slow" &&
+      previousDialogueResponseMode !== "direct_answer_then_check" &&
       previousAdaptiveHintLevel !== undefined &&
       (response.meta?.hintState?.hintLevel ?? 0) > previousAdaptiveHintLevel + 1
     ) {
@@ -216,6 +273,7 @@ export function inspectConversationQaTurn({
   }
   if (
     previousAdaptiveHintLevel !== undefined &&
+    previousDialogueResponseMode !== "direct_answer_then_check" &&
     adaptiveHint &&
     adaptiveHint.hintLevel > previousAdaptiveHintLevel + 1 &&
     adaptiveHint.lastHintType !== "worked_example"
@@ -260,6 +318,47 @@ export function inspectConversationQaTurn({
     addIssue(issues, "NEW_CONCEPT_BEFORE_REVIEW", turn, "필요한 복습보다 다른 개념으로 이동했습니다.");
   }
   const questionCount = (message.match(/[?？]/g) ?? []).length;
+  const dialoguePlan = response.meta?.dialoguePlan;
+  const canonicalStudentModel = response.meta?.studentModel;
+  if (!canonicalStudentModel) addIssue(issues, "STUDENT_MODEL_NOT_PERSISTED", turn, "Runtime 결과에 canonical Student Model이 없습니다.");
+  if (canonicalStudentModel) {
+    const studentState = getStudentConceptState(canonicalStudentModel, dialoguePlan?.activeConcept ?? response.meta?.concept ?? "");
+    const canonicalMastered = isStudentConceptMastered(studentState, Boolean(studentState.misconceptionSummary));
+    if (canonicalStudentModel.explanationHistory.length > 30) addIssue(issues, "EXPLANATION_HISTORY_UNBOUNDED", turn, "설명 이력이 30개 제한을 초과했습니다.");
+    if (previousStudentHistoryCount !== undefined && canonicalStudentModel.explanationHistory.length < previousStudentHistoryCount) addIssue(issues, "EXPLANATION_HISTORY_LOST", turn, "이전 설명 이력이 유실됐습니다.");
+    if (canonicalStudentModel.masteredConcepts.includes(dialoguePlan?.activeConcept ?? "") && !canonicalMastered) addIssue(issues, "PREMATURE_MASTERY", turn, "Student Model이 충분한 근거 없이 숙달 처리됐습니다.");
+    if (response.meta?.mastery && isMastered(response.meta.mastery) !== canonicalMastered) addIssue(issues, "MASTERY_STATE_CONFLICT", turn, "Mastery와 Student Model의 숙달 결론이 다릅니다.");
+    if (studentState.confidence === "LOW" && response.meta?.adaptiveProfile?.learningStyle === "concise_preferred") addIssue(issues, "ADAPTIVE_STATE_CONFLICT", turn, "낮은 확신도와 Adaptive 설명 전략이 충돌합니다.");
+    if (dialoguePlan?.studentModel && dialoguePlan.studentModel.updatedAt !== canonicalStudentModel.updatedAt) addIssue(issues, "DUPLICATE_UNDERSTANDING_SOURCE", turn, "DialoguePlan과 Runtime Student Model이 서로 다릅니다.");
+  }
+  if (!dialoguePlan?.teachingGoal?.trim()) addIssue(issues, "TEACHING_GOAL_MISSING", turn, "이번 턴의 교수 목표가 계산되지 않았습니다.");
+  if (!dialoguePlan?.teachingStrategy) addIssue(issues, "TEACHING_STRATEGY_MISSING", turn, "교수 전략이 계산되지 않았습니다.");
+  if (![1, 2, 3].includes(dialoguePlan?.teachingLevel ?? 0)) addIssue(issues, "TEACHING_LEVEL_INVALID", turn, "설명 수준이 유효하지 않습니다.");
+  if (scenario.expected.expectedTeachingStrategy && dialoguePlan?.teachingStrategy !== scenario.expected.expectedTeachingStrategy) {
+    addIssue(issues, "TEACHING_STRATEGY_MISSING", turn, `예상 교수 전략 ${scenario.expected.expectedTeachingStrategy}을 사용하지 않았습니다.`);
+  }
+  if (scenario.expected.teachingGoalPattern && !scenario.expected.teachingGoalPattern.test(dialoguePlan?.teachingGoal ?? "")) {
+    addIssue(issues, "TEACHING_GOAL_MISSING", turn, "질문 의도에 맞는 교수 목표가 아닙니다.");
+  }
+  if (dialoguePlan?.directAnswerRequired && !["direct_answer", "direct_answer_then_check"].includes(dialoguePlan.responseMode ?? "")) {
+    addIssue(issues, "DIRECT_ANSWER_SKIPPED", turn, "명시적 질문에 대한 직접 답변 계획이 누락됐습니다.");
+  }
+  if (dialoguePlan?.directAnswerRequired && dialoguePlan.activeConcept !== response.meta?.concept && /형태소/.test(message)) {
+    addIssue(issues, "USER_INTENT_OVERRIDDEN_BY_ROUTE", turn, "학생 의도보다 기존 Route 질문이 우선됐습니다.");
+  }
+  if ((dialoguePlan?.requestedExampleCount ?? 0) > 1) {
+    const exampleMarkers = message.match(/(?:^|\n)\s*\d+[.)]/g)?.length ?? 0;
+    if (exampleMarkers < (dialoguePlan?.requestedExampleCount ?? 0)) addIssue(issues, "REQUESTED_EXAMPLE_COUNT_IGNORED", turn, "요청한 예문 개수를 충족하지 못했습니다.");
+  }
+  if (dialoguePlan?.responseMode === "bridge_to_prerequisite" && (dialoguePlan.failureCountForActiveConcept ?? 0) < 2) {
+    addIssue(issues, "PREMATURE_PREREQUISITE_JUMP", turn, "같은 개념 재설명 전에 선수 개념으로 이동했습니다.");
+  }
+  if (studentInput && /몰라|모르겠|이해가 안/.test(studentInput) && (dialoguePlan?.failureCountForActiveConcept ?? 0) < 2 && dialoguePlan?.responseMode === "bridge_to_prerequisite") {
+    addIssue(issues, "SAME_CONCEPT_REEXPLANATION_SKIPPED", turn, "첫 이해 실패에서 같은 개념 재설명을 건너뛰었습니다.");
+  }
+  if (dialoguePlan?.directAnswerRequired && dialoguePlan.activeConcept !== "형태소" && /먼저\s*(?:형태소|단어)|학생들.*나눌/.test(message)) {
+    addIssue(issues, "IRRELEVANT_DIAGNOSTIC_QUESTION", turn, "명시적 질문 대신 무관한 대표 진단 질문을 사용했습니다.");
+  }
   const inputGuide = /한 단어로 답해도 돼|예:|___|이유를 짧게 한 문장|적어 봐/.test(message);
   if (questionCount > 0 && response.suggestedReplies.length < 2 && !inputGuide && response.meta?.learningStatus !== "completed") {
     addIssue(issues, "DEAD_END_RESPONSE", turn, "질문이 있지만 선택지나 구체적인 입력 안내가 없습니다.");
@@ -295,7 +394,10 @@ export function inspectConversationQaTurn({
   if (
     scenario.expected.forbidRepeatedSuggestedReplies && previousReplies.length > 0 &&
     JSON.stringify(previousReplies) === JSON.stringify(response.suggestedReplies)
-  ) addIssue(issues, "REPEATED_SUGGESTED_REPLIES", turn, "동일한 선택지가 연속 사용됐습니다.");
+  ) {
+    addIssue(issues, "REPEATED_SUGGESTED_REPLIES", turn, "동일한 선택지가 연속 사용됐습니다.");
+    addIssue(issues, "IDENTICAL_SUGGESTED_REPLIES_REPEATED", turn, "학생 요청과 무관하게 같은 선택지 배열이 반복됐습니다.");
+  }
   if (previousReplies.length > 0 && response.suggestedReplies.length === 0 && !inputGuide && response.meta?.learningStatus !== "completed") {
     addIssue(issues, "SUGGESTED_REPLIES_DISAPPEARED", turn, "선택지가 사라졌지만 입력 안내가 없습니다.");
   }
@@ -306,7 +408,7 @@ export function inspectConversationQaTurn({
   ) addIssue(issues, "HINT_NOT_PROGRESSING", turn, "이해 불가 응답 뒤 도움 단계와 질문이 변하지 않았습니다.");
   if (
     response.suggestedReplies.includes("응") && response.suggestedReplies.includes("아니") &&
-    !/(까|니|나요)\?/.test(message)
+    !/(까|니|나요)\?|수\s*있는지.*볼래\?/.test(message)
   ) addIssue(issues, "GENERIC_YES_NO_REPLIES", turn, "예/아니오 대상이 명확하지 않습니다.");
   if (
     /(무엇|어느 말|어느 것)/.test(message) &&
@@ -368,8 +470,10 @@ export function runConversationQaScenario(scenario: ConversationQaScenario): Con
   let previousHintLevel: number | undefined;
   let previousAdaptiveHintLevel: number | undefined;
   let previousHintType: string | undefined;
+  let previousDialogueResponseMode: string | undefined;
   let previousWorkedExampleStep: number | undefined;
   let previousGoal: { currentGoal: string; goalProgress: number } | undefined;
+  let previousStudentHistoryCount: number | undefined;
   const recentSuggestedReplies: string[][] = [];
 
   inputs.forEach((studentInput, index) => {
@@ -390,7 +494,7 @@ export function runConversationQaScenario(scenario: ConversationQaScenario): Con
     const routeBefore = model.learningRoute?.currentIndex ?? null;
     const routeConceptBefore = model.learningRoute?.route[model.learningRoute.currentIndex] ?? null;
     const temporaryInterruption = Boolean(
-      routeConceptBefore && /[?？]|뭐|왜|어떻게/.test(studentInput) &&
+      routeConceptBefore && classifyUserIntent(studentInput).includes("unrelated_question") &&
       !/다른\s*거\s*물어|이제\s*.+(?:공부|배울)|.+말고|새\s*주제로/.test(studentInput),
     );
     const response = createMockChatResponse({
@@ -399,7 +503,7 @@ export function runConversationQaScenario(scenario: ConversationQaScenario): Con
       recentSuggestedReplies: recentSuggestedReplies.slice(-3),
     });
     transcript.push({ role: "assistant", content: response.message });
-    inspectConversationQaTurn({ scenario, issues, turn, response, previousResponse, previousReplies, previousHintLevel, previousAdaptiveHintLevel, previousHintType, previousWorkedExampleStep, previousGoal, studentInput });
+    inspectConversationQaTurn({ scenario, issues, turn, response, previousResponse, previousReplies, previousHintLevel, previousAdaptiveHintLevel, previousHintType, previousDialogueResponseMode, previousWorkedExampleStep, previousGoal, previousStudentHistoryCount, studentInput });
     if (
       temporaryInterruption &&
       response.meta?.dialoguePlan?.activeConcept !==
@@ -477,6 +581,7 @@ export function runConversationQaScenario(scenario: ConversationQaScenario): Con
           responseMode,
         ].slice(-100),
         learningRoute: nextRoute,
+        studentProfile: response.meta.studentModel ?? requestModel.studentProfile,
       };
     }
     previousResponse = response.message;
@@ -484,10 +589,12 @@ export function runConversationQaScenario(scenario: ConversationQaScenario): Con
     previousHintLevel = response.meta?.hintLevelUsed;
     previousAdaptiveHintLevel = response.meta?.hintState?.hintLevel;
     previousHintType = response.meta?.hintState?.lastHintType;
+    previousDialogueResponseMode = response.meta?.dialoguePlan?.responseMode;
     previousWorkedExampleStep = response.meta?.workedExampleState?.exampleStep;
     previousGoal = response.meta?.goalState
       ? { currentGoal: response.meta.goalState.currentGoal, goalProgress: response.meta.goalState.goalProgress }
       : previousGoal;
+    previousStudentHistoryCount = response.meta?.studentModel?.explanationHistory.length ?? previousStudentHistoryCount;
     if (response.suggestedReplies.length > 0) {
       recentSuggestedReplies.push(response.suggestedReplies);
     }

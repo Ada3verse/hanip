@@ -3,7 +3,14 @@ export interface FirebasePublicConfig {
   authDomain: string;
   projectId: string;
   storageBucket: string;
+  messagingSenderId?: string;
   appId: string;
+}
+
+export interface FirebaseAdminConfig {
+  projectId: string;
+  clientEmail: string;
+  privateKey: string;
 }
 
 export type FirebaseClientStatus = "configured" | "unconfigured";

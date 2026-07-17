@@ -38,7 +38,7 @@ export async function runFirebaseRepositoryLocalTests() {
   await firebaseRepository.saveUserData(userId, data);
   check((await firebaseRepository.loadUserData(userId))?.settings.tutorName === "잎새", "E settings and mastery restore");
 
-  const model = data.studentModel ?? {
+  const model = {
     currentConcept: "품사", currentFlowStage: "진단", understoodConcepts: [], needsSupportConcepts: [], misconceptions: [], lastEvaluation: null,
     lastNextAction: null, confidence: null, consecutiveSuggestedReplyUses: 0, lastResponseMode: null, hintLevel: 0 as const,
     consecutiveUnknownResponses: 0, learningStatus: "in_progress" as const, completionEvidence: [], learningMode: "learn" as const,

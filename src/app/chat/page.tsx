@@ -54,6 +54,7 @@ import type {
 } from "@/lib/types/chat";
 import type { LearningProgress } from "@/lib/progress/types";
 import type { LearningState } from "@/lib/learningState/types";
+import { filterPersonalData } from "@/lib/security/privacyFilter";
 
 type Message = ChatMessage & {
   id: string;
@@ -422,6 +423,7 @@ function updateStudentModel(
     sessionSummaries: meta.sessionSummary
       ? [...(currentModel.sessionSummaries ?? []), meta.sessionSummary].slice(-30)
       : currentModel.sessionSummaries,
+    studentProfile: meta.studentModel ?? currentModel.studentProfile,
     responseModeHistory: currentModel.lastResponseMode
       ? [...(currentModel.responseModeHistory ?? []), currentModel.lastResponseMode].slice(-100)
       : currentModel.responseModeHistory,
@@ -666,8 +668,12 @@ function ChatContent() {
     rawInput: string,
     responseMode: StudentResponseMode,
   ) => {
-    const userInput = rawInput.trim();
+    const filtered = filterPersonalData(rawInput.trim());
+    const userInput = filtered.safeText;
     if (!userInput || isLoadingRef.current) return;
+    if (filtered.detected.length > 0) {
+      window.alert("개인정보로 보이는 내용은 안전을 위해 가렸어요. 이름, 연락처, 학교 정보는 입력하지 마세요.");
+    }
 
     shouldPersistRef.current = true;
     setRetryRequest(null);

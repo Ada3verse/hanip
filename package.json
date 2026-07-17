@@ -6,10 +6,20 @@
     "dev": "next dev",
     "build": "node scripts/production-build.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "security:scan": "node scripts/security-gate.mjs --checks-only",
+    "security:gate": "node scripts/security-gate.mjs",
+    "security:deployment": "node scripts/security-check-deployment.mjs",
+    "deployment:ready": "node --env-file-if-exists=.env.local scripts/deployment-ready.mjs",
+    "user:create": "node scripts/firebase-user-admin.mjs create",
+    "user:reset-pin": "node scripts/firebase-user-admin.mjs reset-pin",
+    "retention:check": "node scripts/firebase-retention.mjs",
+    "retention:delete": "node scripts/firebase-retention.mjs",
+    "admin:credential:create": "node scripts/admin-credential-create.mjs"
   },
   "dependencies": {
     "firebase": "^12.16.0",
+    "firebase-admin": "^14.2.0",
     "next": "16.2.10",
     "openai": "^6.46.0",
     "react": "19.2.4",

@@ -31,7 +31,11 @@ import { createMockChatResponse } from "@/lib/testing/mockChatResponse";
 import { runTutorRuntime } from "@/lib/runtime/tutorRuntime";
 import { mockResponseGenerator } from "@/lib/runtime/mockResponseGenerator";
 import { createOpenAIResponseGenerator } from "@/lib/runtime/openAIResponseGenerator";
-import { selectResponseProvider } from "@/lib/runtime/responseGenerator";
+import { createResponseProvider } from "@/lib/runtime/responseProviderFactory";
+import { RuntimeRequestGuard } from "@/lib/runtime/requestGuard";
+import { STUDENT_SESSION_COOKIE, verifyStudentSession } from "@/lib/security/session";
+import { getSecurityContext } from "@/lib/security/serverContext";
+import { isSameOriginRequest } from "@/lib/security/http";
 import {
   buildLearningStateContext,
   calculateLearningState,
@@ -108,7 +112,32 @@ type OpenAIErrorInfo = ChatApiErrorResponse["error"] & {
 const RETRY_DELAYS_MS = [1000, 2000] as const;
 const MAX_LIVE_TEST_REQUESTS = 3;
 let liveTestRequestCount = 0;
+const openAIRequestGuard = new RuntimeRequestGuard();
 function isTutorRuntimeEnabled(): boolean { return true; }
+
+async function persistAuthenticatedTurn(input: { uid: string; sessionId: string; request: ChatApiRequest; response: ChatApiResponse }) {
+  const data = getSecurityContext().data; if (!data) return;
+  const userContent = input.request.messages.findLast(({ role }) => role === "user")?.content ?? "";
+  if (!userContent) return;
+  await data.saveTurn(input.uid, input.sessionId, userContent, input.response.message, input.response.meta ?? input.request.studentModel ?? null);
+}
+
+function runtimeProviderError(category: string, retryable: boolean): { status: number; error: ChatApiErrorResponse["error"] } {
+  const table: Record<string, { status: number; code: ChatApiErrorCode }> = {
+    missing_api_key: { status: 503, code: "PROVIDER_CONFIGURATION_ERROR" },
+    invalid_api_key: { status: 401, code: "INVALID_API_KEY" },
+    authentication_error: { status: 401, code: "AUTHENTICATION_ERROR" },
+    rate_limit: { status: 429, code: "RATE_LIMITED" },
+    quota_exceeded: { status: 429, code: "QUOTA_EXCEEDED" },
+    timeout: { status: 503, code: "OPENAI_UNAVAILABLE" },
+    network_error: { status: 503, code: "NETWORK_ERROR" },
+    provider_unavailable: { status: 503, code: "OPENAI_UNAVAILABLE" },
+    invalid_response: { status: 502, code: "INVALID_RESPONSE" },
+    unknown_error: { status: 500, code: "UNKNOWN_ERROR" },
+  };
+  const item = table[category] ?? table.unknown_error;
+  return { status: item.status, error: { code: item.code, message: "지금은 답변을 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.", retryable } };
+}
 
 function getOpenAIErrorInfo(error: unknown): OpenAIErrorInfo {
   const status =
@@ -777,9 +806,16 @@ function parseOpenAIResponse(outputText: string) {
 }
 
 export async function POST(request: Request) {
+  if (!isSameOriginRequest(request)) return NextResponse.json<ChatApiErrorResponse>({ error: { code: "INVALID_REQUEST", message: "요청을 처리할 수 없습니다.", retryable: false } }, { status: 403 });
   const isLiveTestRequestHeader =
     process.env.NODE_ENV !== "production" &&
     request.headers.get("x-hanip-live-ai-test") === "true";
+
+  const cookieValue = request.headers.get("cookie")?.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${STUDENT_SESSION_COOKIE}=`))?.slice(STUDENT_SESSION_COOKIE.length + 1) ?? "";
+  const authenticatedSession = await verifyStudentSession(decodeURIComponent(cookieValue), process.env.HANIP_SESSION_SECRET ?? "", getSecurityContext().sessions);
+  if (!authenticatedSession) {
+    return NextResponse.json<ChatApiErrorResponse>({ error: { code: "INVALID_REQUEST", message: "로그인이 필요합니다.", retryable: false } }, { status: 401 });
+  }
 
   try {
     const body: unknown = await request.json();
@@ -880,22 +916,55 @@ export async function POST(request: Request) {
     }
 
     if (isTutorRuntimeEnabled()) {
-      const responseProvider = selectResponseProvider(process.env.HANIP_USE_MOCK_AI, liveTestRequested, liveTestsEnabled);
-      const useLiveGenerator = responseProvider === "openai";
+      const responseProvider = createResponseProvider({
+        mockSetting: process.env.HANIP_USE_MOCK_AI,
+        liveTestRequested,
+        liveTestsEnabled,
+        apiKey: process.env.OPENAI_API_KEY,
+        isDevelopment,
+        mockGenerator: mockResponseGenerator,
+        createOpenAI: () => createOpenAIResponseGenerator({
+          apiKey: process.env.OPENAI_API_KEY,
+          model: process.env.OPENAI_MODEL,
+        }),
+      });
+      if (responseProvider.kind === "blocked") {
+        return NextResponse.json<ChatApiErrorResponse>({ error: { code: "LIVE_TESTS_DISABLED", message: "개발용 실제 AI 테스트가 비활성화되어 있습니다.", retryable: false } }, { status: 403 });
+      }
+      if (responseProvider.kind === "misconfigured" || !responseProvider.generator) {
+        return NextResponse.json<ChatApiErrorResponse>({ error: { code: "PROVIDER_CONFIGURATION_ERROR", message: "지금은 답변을 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.", retryable: false } }, { status: 503 });
+      }
       if (liveTestRequested) {
         if (liveTestRequestCount >= MAX_LIVE_TEST_REQUESTS) {
           return NextResponse.json<ChatApiErrorResponse>({ error: { code: "LIVE_TEST_LIMIT_REACHED", message: "개발용 실제 AI 테스트 한도에 도달했습니다.", retryable: false } }, { status: 429 });
         }
         liveTestRequestCount += 1;
       }
-      const responseGenerator = useLiveGenerator
-        ? createOpenAIResponseGenerator({
-            apiKey: process.env.OPENAI_API_KEY,
-            model: process.env.OPENAI_MODEL,
-            log: ({ provider, category, requestId, elapsed }) => console.error("AI response generator failed", { provider, category, requestId, elapsed }),
-          })
-        : mockResponseGenerator;
-      const runtimeResult = await runTutorRuntime({ request: normalizedRequest, responseGenerator });
+      const requestFingerprint = responseProvider.kind === "openai"
+        ? JSON.stringify({ messages: normalizedRequest.messages, learningMode, learningGoal, priorProgressContext })
+        : "";
+      if (requestFingerprint && !openAIRequestGuard.begin(requestFingerprint)) {
+        return NextResponse.json<ChatApiErrorResponse>({ error: { code: "INVALID_REQUEST", message: "이미 같은 질문의 답변을 준비하고 있어요.", retryable: false } }, { status: 409 });
+      }
+      let runtimeResult: Awaited<ReturnType<typeof runTutorRuntime>>;
+      try {
+        runtimeResult = await runTutorRuntime({ request: normalizedRequest, responseGenerator: responseProvider.generator });
+      } finally {
+        openAIRequestGuard.end(requestFingerprint);
+      }
+      if (runtimeResult.providerFailure) {
+        const failure = runtimeProviderError(runtimeResult.providerFailure.category, runtimeResult.providerFailure.retryable);
+        console.error("AI provider request failed", {
+          provider: "openai",
+          category: runtimeResult.providerFailure.category,
+          requestId: runtimeResult.providerFailure.requestId,
+          elapsed: runtimeResult.events.findLast(({ step }) => step === "ERROR")?.elapsed ?? 0,
+          evidenceCount: runtimeResult.context.retrieval?.usedEvidence.length ?? 0,
+          success: false,
+        });
+        return NextResponse.json<ChatApiErrorResponse>({ error: failure.error }, { status: failure.status });
+      }
+      await persistAuthenticatedTurn({ uid: authenticatedSession.uid, sessionId: authenticatedSession.id, request: normalizedRequest, response: runtimeResult.response });
       return NextResponse.json(runtimeResult.response);
     }
 
@@ -903,7 +972,9 @@ export async function POST(request: Request) {
       (isDevelopment && !liveTestRequested) ||
       (!isDevelopment && useMockAi)
     ) {
-      return NextResponse.json(createMockChatResponse(normalizedRequest));
+      const response = createMockChatResponse(normalizedRequest);
+      await persistAuthenticatedTurn({ uid: authenticatedSession.uid, sessionId: authenticatedSession.id, request: normalizedRequest, response });
+      return NextResponse.json(response);
     }
 
     if (liveTestRequested) {
@@ -1429,6 +1500,7 @@ export async function POST(request: Request) {
       }
     }
 
+    await persistAuthenticatedTurn({ uid: authenticatedSession.uid, sessionId: authenticatedSession.id, request: normalizedRequest, response: responseBody });
     return successResponse;
   } catch (error) {
     const errorInfo = getOpenAIErrorInfo(error);

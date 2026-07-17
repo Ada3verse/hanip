@@ -1,5 +1,6 @@
 import { createEmptyLearningProgress, sanitizeLearningProgress } from "@/lib/progress/progressStorage";
 import type { ChatMessage, StudentSessionModel } from "@/lib/types/chat";
+import { createEmptyRuntimeStudentModel, normalizeRuntimeStudentModel } from "@/lib/studentModel/studentModelEngine";
 import type { LearningRepository } from "./learningRepository";
 import { migrateLegacyData } from "./migrations";
 import {
@@ -43,7 +44,7 @@ export function createEmptyLearningUserData(userId: string): LearningUserData {
     userId,
     currentSessionId: null,
     sessions: [],
-    studentModel: null,
+    studentModel: createEmptyRuntimeStudentModel(now),
     progress: createEmptyLearningProgress(),
     masteryProfiles: [],
     hintStates: [],
@@ -120,7 +121,7 @@ function normalizeSession(value: unknown, fallbackNow: string): StoredLearningSe
 
 export function normalizeLearningUserData(value: unknown, userId: string): LearningUserData {
   const empty = createEmptyLearningUserData(userId);
-  if (!record(value) || value.schemaVersion !== 1 || value.userId !== userId) return empty;
+  if (!record(value) || ![1, 2].includes(Number(value.schemaVersion)) || value.userId !== userId) return empty;
   const now = new Date().toISOString();
   const sessionMap = new Map<string, StoredLearningSession>();
   if (Array.isArray(value.sessions)) {
@@ -144,7 +145,12 @@ export function normalizeLearningUserData(value: unknown, userId: string): Learn
     ...empty,
     currentSessionId,
     sessions,
-    studentModel: record(value.studentModel) ? value.studentModel as unknown as StudentSessionModel : current?.studentModel ?? null,
+    studentModel: normalizeRuntimeStudentModel(
+      record(value.studentModel)
+        ? value.studentModel
+        : current?.studentModel.studentProfile,
+      now,
+    ),
     progress: record(value.progress) ? sanitizeLearningProgress(value.progress as unknown as LearningUserData["progress"]) : empty.progress,
     masteryProfiles: profileList(value.masteryProfiles, (item) => (item as { conceptId?: string }).conceptId ?? ""),
     hintStates: profileList(value.hintStates, (item) => (item as { conceptId?: string }).conceptId ?? ""),
@@ -205,7 +211,8 @@ export class LocalLearningRepository implements LearningRepository {
     const data = this.loadUserDataSync(userId) ?? createEmptyLearningUserData(userId);
     const sessions = [...data.sessions.filter(({ sessionId }) => sessionId !== session.sessionId), session];
     this.saveUserDataSync(userId, {
-      ...data, sessions, currentSessionId: session.sessionId, studentModel: session.studentModel,
+      ...data, sessions, currentSessionId: session.sessionId,
+      studentModel: normalizeRuntimeStudentModel(session.studentModel.studentProfile ?? data.studentModel),
       masteryProfiles: Object.values(session.studentModel.masteryStates ?? {}),
       hintStates: Object.values(session.studentModel.hintStates ?? {}),
       workedExampleStates: Object.values(session.studentModel.workedExampleStates ?? {}),
@@ -222,20 +229,20 @@ export class LocalLearningRepository implements LearningRepository {
   }
   async resetCurrentSession(userId: string) {
     const data = this.loadUserDataSync(userId); if (!data) return;
-    this.saveUserDataSync(userId, { ...data, sessions: data.sessions.filter(({ sessionId }) => sessionId !== data.currentSessionId), currentSessionId: null, studentModel: null, goalState: null });
+    this.saveUserDataSync(userId, { ...data, sessions: data.sessions.filter(({ sessionId }) => sessionId !== data.currentSessionId), currentSessionId: null, goalState: null });
   }
   async resetLearningProgress(userId: string) {
     const data = this.loadUserDataSync(userId); if (!data) return;
-    this.saveUserDataSync(userId, { ...data, sessions: [], currentSessionId: null, studentModel: null, progress: createEmptyLearningProgress(), masteryProfiles: [], hintStates: [], workedExampleStates: [], misconceptionProfiles: [], adaptiveProfiles: [], goalState: null, sessionSummaries: [] });
+    this.saveUserDataSync(userId, { ...data, sessions: [], currentSessionId: null, studentModel: createEmptyRuntimeStudentModel(), progress: createEmptyLearningProgress(), masteryProfiles: [], hintStates: [], workedExampleStates: [], misconceptionProfiles: [], adaptiveProfiles: [], goalState: null, sessionSummaries: [] });
   }
   async exportUserData(userId: string): Promise<LearningDataExport> {
-    return { schemaVersion: 1, exportedAt: new Date().toISOString(), data: this.loadUserDataSync(userId) ?? createEmptyLearningUserData(userId) };
+    return { schemaVersion: 2, exportedAt: new Date().toISOString(), data: this.loadUserDataSync(userId) ?? createEmptyLearningUserData(userId) };
   }
   async importUserData(userId: string, value: unknown): Promise<RepositoryImportResult> {
     if (!record(value)) return { success: false, error: "INVALID_DATA" };
     const version = value.schemaVersion;
-    if (typeof version === "number" && version > 1) return { success: false, error: "UNSUPPORTED_VERSION" };
-    if (version !== 1 || !record(value.data) || value.data.schemaVersion !== 1 || value.data.userId !== userId) return { success: false, error: "INVALID_DATA" };
+    if (typeof version === "number" && version > 2) return { success: false, error: "UNSUPPORTED_VERSION" };
+    if ((version !== 1 && version !== 2) || !record(value.data) || ![1, 2].includes(Number(value.data.schemaVersion)) || value.data.userId !== userId) return { success: false, error: "INVALID_DATA" };
     const before = this.storage.getItem(repositoryStorageKey(userId));
     try {
       const normalized = normalizeLearningUserData(value.data, userId);

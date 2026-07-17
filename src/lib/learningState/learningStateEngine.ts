@@ -18,6 +18,7 @@ import type { HintState } from "@/lib/hint/types";
 import type { WorkedExampleState } from "@/lib/workedExample/types";
 import type { GoalState } from "@/lib/goal/types";
 import type { AdaptiveProfile } from "@/lib/adaptive/types";
+import { getStudentConceptState, isStudentConceptMastered } from "@/lib/studentModel/studentModelEngine";
 
 const CONCEPT_PATTERNS: Array<[RegExp, string]> = [
   [/품사와\s*문장\s*성분/, "parts-of-speech-vs-sentence-component"],
@@ -52,6 +53,10 @@ function conceptUnderstood(
 ) {
   const names = [id, getDependencyConceptName(id)];
   if (model.needsSupportConcepts?.some((item) => names.includes(item))) return false;
+  const canonical = getStudentConceptState(model.studentProfile, id);
+  if (canonical.understandingLevel > 0 || canonical.evidenceCount > 0) {
+    return isStudentConceptMastered(canonical, Boolean(canonical.misconceptionSummary));
+  }
   if (model.completedPrerequisites?.includes(id)) return true;
   if (model.understoodConcepts?.some((item) => names.includes(item))) return true;
   return progressForConcept(progress, id)?.status === "understood";
@@ -179,27 +184,31 @@ export function calculateLearningState({
     : currentConcept?.trim() || studentModel.currentConcept?.trim() || "국어 문법";
   const conceptId = inferLearningConceptId(concept) ?? concept;
   const progress = progressForConcept(learningProgress, conceptId);
+  const canonicalConcept = getStudentConceptState(studentModel.studentProfile, conceptId);
+  const canonicalMastered = isStudentConceptMastered(canonicalConcept, Boolean(canonicalConcept.misconceptionSummary));
   const masteryScore = progress?.masteryScore ?? studentModel.priorMasteryScore ?? 0;
   const legacyCompletionVerified =
     studentModel.learningStatus === "completed" &&
     studentModel.lastEvaluation === "correct" &&
     (studentModel.completionEvidence?.length ?? 0) >= 2;
+  const canonicalConfidence = canonicalConcept.confidence === "HIGH" ? .9 : canonicalConcept.confidence === "MEDIUM" ? .6 : 0;
   const mastery = masteryState ?? progress?.mastery ?? {
     ...createInitialMasteryState(conceptId),
-    masteryScore: legacyCompletionVerified ? Math.max(85, masteryScore) : masteryScore,
-    confidence: legacyCompletionVerified ? Math.max(0.85, studentModel.confidence ?? 0) : studentModel.confidence ?? 0,
-    correctStreak: legacyCompletionVerified ? 2 : 0,
-    masteredAt: legacyCompletionVerified ? new Date().toISOString() : null,
-    nextReviewAt: legacyCompletionVerified
+    masteryScore: canonicalMastered || legacyCompletionVerified ? Math.max(85, masteryScore) : masteryScore,
+    confidence: canonicalConcept.evidenceCount > 0 ? canonicalConfidence : legacyCompletionVerified ? Math.max(0.85, studentModel.confidence ?? 0) : studentModel.confidence ?? 0,
+    correctStreak: canonicalConcept.evidenceCount > 0 ? canonicalConcept.consecutiveSuccesses : legacyCompletionVerified ? 2 : 0,
+    masteredAt: canonicalMastered ? canonicalConcept.updatedAt : legacyCompletionVerified ? new Date().toISOString() : null,
+    nextReviewAt: canonicalMastered || legacyCompletionVerified
       ? new Date(Date.now() + 86_400_000).toISOString()
       : null,
   };
-  const misconception = studentModel.misconceptions?.at(-1) ?? "";
+  const misconception = canonicalConcept.misconceptionSummary ?? studentModel.misconceptions?.at(-1) ?? "";
   const reviewRequired =
     studentModel.lastEvaluation === "misconception" ||
     (studentModel.needsSupportConcepts?.length ?? 0) > 0 ||
     progress?.status === "needs_review" ||
     mastery.needsReview;
+  const effectiveReviewRequired = reviewRequired || canonicalConcept.consecutiveFailures > 0 || Boolean(canonicalConcept.misconceptionSummary);
   const dependencyState = calculateDependency(conceptId, studentModel, learningProgress);
   const status = studentModel.learningStatus ?? "in_progress";
   const effectiveStatus =
@@ -225,11 +234,11 @@ export function calculateLearningState({
     mode,
     goal,
     adaptiveLevel,
-    reviewRequired,
+    reviewRequired: effectiveReviewRequired,
     mastery,
   });
   const reason: string[] = [];
-  if (reviewRequired) reason.push("needs_support");
+  if (effectiveReviewRequired) reason.push("needs_support");
   if (dependencyState) reason.push("dependency_required");
   if ((studentModel.hintLevel ?? 0) > 0) reason.push(`hint_level_${studentModel.hintLevel}`);
   if (misconception) reason.push("review_after_misconception");
@@ -263,18 +272,18 @@ export function calculateLearningState({
       evidence: studentModel.completionEvidence ?? [],
       complete: status === "completed" && isMastered(mastery),
     },
-    reviewRequired,
+    reviewRequired: effectiveReviewRequired,
     nextRecommendedConcept:
       route?.route[route.currentIndex + 1] ??
       getConceptDependency(conceptId)?.recommendedAfter[0] ?? null,
     reason,
     mastery,
     review: {
-      required: reviewRequired,
-      concept: reviewRequired ? concept : null,
+      required: effectiveReviewRequired,
+      concept: effectiveReviewRequired ? concept : null,
     },
     nextReview: mastery.nextReviewAt,
-    recommendedReviewConcept: reviewRequired ? concept : null,
+    recommendedReviewConcept: effectiveReviewRequired ? concept : null,
     hint: adaptiveHint,
     workedExample,
     sessionSummaryReady: effectiveStatus === "completed" || Boolean(route?.completedConcepts.length),

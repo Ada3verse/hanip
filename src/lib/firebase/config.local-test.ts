@@ -1,4 +1,4 @@
-import { getConfiguredFirebaseProvider, getFirebaseConfig, hasFirebaseConfig } from "./config";
+import { getConfiguredFirebaseProvider, getFirebaseConfig, getFirebaseRuntimeMode, hasFirebaseConfig } from "./config";
 
 function check(value: unknown, message: string) {
   if (!value) throw new Error(`Firebase config test failed: ${message}`);
@@ -23,4 +23,5 @@ export function runFirebaseConfigLocalTests() {
   check(getConfiguredFirebaseProvider({ ...completeEnv, NEXT_PUBLIC_FIREBASE_PROJECT_ID: undefined }) === "local", "incomplete config falls back to Local");
   check(getFirebaseConfig({ ...completeEnv, NEXT_PUBLIC_FIREBASE_API_KEY: "  test-api-key  " })?.apiKey === "test-api-key", "values trimmed");
   check(getFirebaseConfig({ ...completeEnv, NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: undefined, NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: undefined }) !== null, "optional analytics values ignored");
+  check(getFirebaseRuntimeMode({ ...completeEnv, NEXT_PUBLIC_FIREBASE_USE_EMULATOR: "true" }) === (process.env.NODE_ENV === "production" ? "production" : "emulator"), "emulator is development only");
 }

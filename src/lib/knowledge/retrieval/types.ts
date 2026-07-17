@@ -4,8 +4,9 @@ import type { KnowledgeCandidate } from "@/lib/knowledge/source/types";
 import type { StudentSessionModel } from "@/lib/types/chat";
 import type { WorkedExampleState } from "@/lib/workedExample/types";
 import type { MisconceptionProfile } from "@/lib/misconceptionLearning/types";
+import type { ExplanationStrategy } from "@/lib/explanation/types";
 
-export type RetrievalRole = "definition" | "worked_example" | "misconception" | "hint" | "bridge" | "completion_criterion" | "diagnostic_question";
+export type RetrievalRole = "definition" | "comparison" | "example" | "counterexample" | "worked_example" | "misconception" | "teacher_strategy" | "hint" | "bridge" | "completion_criterion" | "diagnostic_question" | "quiz";
 
 export interface RetrievedEvidence {
   id: string;
@@ -17,6 +18,11 @@ export interface RetrievedEvidence {
 export interface KnowledgeRetrievalResult {
   concept: string;
   action: DialogueAction;
+  knowledgeFound: boolean;
+  matchedConcepts: string[];
+  recommendedStrategy: ExplanationStrategy | null;
+  evidenceCharacterCount: number;
+  estimatedTokens: number;
   reason: string[];
   selectedSources: KnowledgeSource[];
   usedEvidence: Array<Omit<RetrievedEvidence, "source">>;
@@ -36,4 +42,6 @@ export interface KnowledgeRetrievalInput {
   knowledgeCandidates?: readonly KnowledgeCandidate[];
   workedExampleState?: WorkedExampleState | null;
   misconceptionProfiles?: readonly MisconceptionProfile[];
+  currentGoal?: string;
+  currentMission?: string;
 }

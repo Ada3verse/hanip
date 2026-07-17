@@ -17,6 +17,8 @@ export interface ConversationQaExpectation {
   forbidRepeatedOpening?: boolean;
   mustUseProgress?: boolean;
   mustNotRestorePreviousMessages?: boolean;
+  expectedTeachingStrategy?: import("@/lib/dialogue/types").TeachingStrategy;
+  teachingGoalPattern?: RegExp;
 }
 
 export interface ConversationQaScenario {

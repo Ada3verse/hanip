@@ -2,6 +2,7 @@ import type { AiEvaluation, StudentResponseMode } from "@/lib/types/chat";
 import type { HintState } from "@/lib/hint/types";
 import type { MasteryState } from "@/lib/mastery/types";
 import type { WorkedExampleState } from "@/lib/workedExample/types";
+import type { StudentConceptState } from "@/lib/studentModel/types";
 
 export type AdaptiveLearningStyle =
   | "choice_preferred"
@@ -43,6 +44,7 @@ export interface AdaptiveEngineInput {
   workedExamples?: readonly WorkedExampleState[];
   masteryStates?: readonly MasteryState[];
   previous?: AdaptiveProfile | null;
+  studentConceptState?: StudentConceptState;
 }
 
 export interface AdaptiveTurnStrategy {

@@ -1,17 +1,25 @@
-import { getFirebaseConfig } from "./config";
+import { getFirebaseConfig, getFirebaseRuntimeMode } from "./config";
 import type { FirebaseClientDescriptor, FirebasePublicConfig } from "./types";
 import type { FirebaseClientServices } from "./types";
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { connectAuthEmulator, getAuth } from "firebase/auth";
+import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
 
 let services: FirebaseClientServices | null = null;
+let emulatorsConnected = false;
 
 export function initializeFirebaseClient(config: FirebasePublicConfig | null = getFirebaseConfig()): FirebaseClientServices {
   if (!config) throw new Error("Firebase 환경설정이 완전하지 않습니다.");
   if (services) return services;
   const app = getApps().length > 0 ? getApp() : initializeApp(config);
-  services = { app, auth: getAuth(app), firestore: getFirestore(app), config };
+  const auth = getAuth(app);
+  const firestore = getFirestore(app);
+  if (getFirebaseRuntimeMode() === "emulator" && !emulatorsConnected) {
+    connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+    connectFirestoreEmulator(firestore, "127.0.0.1", 8080);
+    emulatorsConnected = true;
+  }
+  services = { app, auth, firestore, config };
   return services;
 }
 

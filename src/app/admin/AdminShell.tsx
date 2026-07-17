@@ -1,0 +1,7 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+
+const links=[["/admin","개요"],["/admin/users","학생 계정"],["/admin/conversations","대화"],["/admin/analytics","학습 통계"],["/admin/retention","보유기간"],["/admin/audit","감사 로그"],["/admin/security","보안"]] as const;
+export function AdminShell({title,children}:{title:string;children:React.ReactNode}){const router=useRouter();async function logout(){await fetch("/api/admin/logout",{method:"POST"});router.replace("/admin/login");router.refresh();}return <main className="min-h-screen bg-gray-50 text-black"><header className="border-b border-gray-200 bg-white"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4"><div><p className="text-xs font-medium text-gray-500">관리자 전용 · 개인정보 최소 조회</p><h1 className="text-xl font-semibold">{title}</h1></div><button onClick={logout} className="min-h-10 rounded-lg border border-gray-300 px-3 text-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-black">로그아웃</button></div><nav aria-label="관리자 메뉴" className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 pb-3">{links.map(([href,label])=><Link key={href} href={href} className="whitespace-nowrap rounded-lg px-3 py-2 text-sm hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-black">{label}</Link>)}</nav></header><section className="mx-auto max-w-7xl p-4 sm:p-6">{children}</section></main>}

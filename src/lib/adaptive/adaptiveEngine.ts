@@ -94,7 +94,11 @@ export function inferAdaptiveProfile(input: AdaptiveEngineInput): AdaptiveProfil
     concept: input.concept,
     learningStyle,
     preferredQuestionType: preferredQuestionType(learningStyle),
-    preferredHintLevel:
+    preferredHintLevel: input.studentConceptState?.understandingLevel === 1
+      ? 3
+      : input.studentConceptState?.understandingLevel === 3
+        ? 0
+        :
       learningStyle === "scaffold_needed"
         ? 3
         : learningStyle === "example_preferred"
@@ -102,7 +106,7 @@ export function inferAdaptiveProfile(input: AdaptiveEngineInput): AdaptiveProfil
           : learningStyle === "concise_preferred"
             ? 0
             : 1,
-    needsWorkedExample:
+    needsWorkedExample: (input.studentConceptState?.consecutiveFailures ?? 0) >= 2 ||
       learningStyle === "example_preferred" ||
       (learningStyle === "scaffold_needed" && misconceptionRate >= 0.25),
     freeInputRate,
