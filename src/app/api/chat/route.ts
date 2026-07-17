@@ -813,7 +813,7 @@ export async function POST(request: Request) {
 
   const cookieValue = request.headers.get("cookie")?.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${STUDENT_SESSION_COOKIE}=`))?.slice(STUDENT_SESSION_COOKIE.length + 1) ?? "";
   const authenticatedSession = await verifyStudentSession(decodeURIComponent(cookieValue), process.env.HANIP_SESSION_SECRET ?? "", getSecurityContext().sessions);
-  if (!authenticatedSession) {
+  if (!authenticatedSession || authenticatedSession.role !== "student") {
     return NextResponse.json<ChatApiErrorResponse>({ error: { code: "INVALID_REQUEST", message: "로그인이 필요합니다.", retryable: false } }, { status: 401 });
   }
 

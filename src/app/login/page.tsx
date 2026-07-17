@@ -5,6 +5,10 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 type LoginError = { message?: string; code?: string; remainingAttempts?: number };
 const CONTACT = "동신중학교 정보교육 담당(정경원)";
+function getSafeReturnPath() {
+  const value = new URLSearchParams(window.location.search).get("next") ?? "/";
+  return value.startsWith("/") && !value.startsWith("//") && !value.startsWith("/admin") && !value.startsWith("/api") ? value : "/";
+}
 export default function LoginPage() {
   const router = useRouter(); const closeButton = useRef<HTMLButtonElement>(null);
   const [nickname,setNickname]=useState(""); const [pin,setPin]=useState(""); const [error,setError]=useState(""); const [loading,setLoading]=useState(false); const [locked,setLocked]=useState(false); const [modalMessage,setModalMessage]=useState("");
@@ -13,7 +17,7 @@ export default function LoginPage() {
     event.preventDefault(); if (loading || locked) return; setLoading(true); setError(""); const data = new FormData(event.currentTarget);
     try {
       const response = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nickname, pin, termsAccepted: data.get("terms") === "on", privacyAccepted: data.get("privacy") === "on", optionalAnalytics: data.get("analytics") === "on" }) });
-      if (response.ok) { router.replace("/"); return; }
+      if (response.ok) { router.replace(getSafeReturnPath()); router.refresh(); return; }
       const value=await response.json() as LoginError;
       if(value.code==="PIN_ATTEMPTS_EXHAUSTED"||value.code==="ACCOUNT_LOCKED"){setLocked(true);setModalMessage(value.message??"로그인이 잠겨 있습니다. 관리자에게 문의해 주세요.");setError("");}
       else {const remaining=typeof value.remainingAttempts==="number"?value.remainingAttempts:null;setError(`닉네임 또는 PIN이 올바르지 않습니다.${remaining!==null?` 남은 입력 기회는 ${remaining}회입니다.`:""}`);}

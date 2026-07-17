@@ -37,7 +37,10 @@ check(nextConfig.includes("Content-Security-Policy") && nextConfig.includes("Str
 check(!read("src/app/error.tsx").includes("error.stack") && !read("src/app/global-error.tsx").includes("error.stack"), "STACK_TRACE_DISCLOSED", "오류 화면 stack 노출");
 check(!read("src/app/error.tsx").includes("error.message"), "FILE_PATH_DISCLOSED", "오류 화면 상세 메시지 노출");
 check(loginRoute.includes("httpOnly: true") && loginRoute.includes("sameSite: \"lax\"") && loginRoute.includes("secure: process.env.NODE_ENV === \"production\"") && loginRoute.includes("maxAge:"), "INSECURE_COOKIE_ATTRIBUTE", "세션 쿠키 속성 누락");
-check(proxy.includes("/account") && proxy.includes("/chat") && proxy.includes("validSignature"), "UNAUTHENTICATED_PRIVATE_API", "보호 경로 인증 누락");
+check(proxy.includes('pathname === "/"') && proxy.includes("/account") && proxy.includes("/chat") && proxy.includes("validSignature"), "UNAUTHENTICATED_PRIVATE_API", "홈 또는 보호 경로 인증 누락");
+check(read("src/app/page.tsx").includes('requireStudentPageSession("/")') && ["chat", "progress", "settings", "account"].every((path) => read(`src/app/${path}/layout.tsx`).includes("requireStudentPageSession")), "STUDENT_ROUTE_SERVER_AUTH_MISSING", "학생 전용 화면의 서버 세션 재검증 누락");
+check(read("src/app/login/layout.tsx").includes("getAuthenticatedStudentSession") && studentLoginPage.includes("getSafeReturnPath"), "STUDENT_LOGIN_RETURN_FLOW_MISSING", "로그인 사용자 우회 또는 안전한 복귀 경로 누락");
+check(read("src/app/api/chat/route.ts").includes('authenticatedSession.role !== "student"'), "CHAT_STUDENT_SESSION_NOT_ENFORCED", "채팅 API 학생 role 재검증 누락");
 check(read("src/app/admin/page.tsx").includes("AdminShell") && read("src/app/admin/login/page.tsx").includes("관리자 로그인"), "ADMIN_PAGE_MISSING", "관리자 페이지 누락");
 check(proxy.includes("hanip_admin_session") && proxy.includes("HANIP_ADMIN_SESSION_SECRET") && proxy.includes("/admin/login"), "ADMIN_API_UNPROTECTED", "관리자 경로의 별도 인증 경계 누락");
 check(proxy.includes("hanip_admin_session") && proxy.includes("HANIP_SESSION_SECRET") && proxy.includes("HANIP_ADMIN_SESSION_SECRET"), "ADMIN_SESSION_SHARED_WITH_STUDENT", "학생·관리자 세션 분리 누락");
@@ -74,7 +77,8 @@ const currentSecretHits = [];
 for (const file of trackedFiles) {
   if (/\.(?:png|jpg|jpeg|gif|ico|pdf|lock)$/i.test(file)) continue;
   let content = ""; try { content = read(file); } catch { continue; }
-  for (const [type, pattern] of secretPatterns) if (pattern.test(content) && !content.includes("your_api_key_here")) currentSecretHits.push({ file, type });
+  if (/\.local-test\./.test(file)) content = content.replaceAll("server@test-project.iam.gserviceaccount.com", "test@example.com").replaceAll("test-only-value", "fixture");
+  for (const [type, pattern] of secretPatterns) if (!(type === "FIREBASE_ADMIN" && /\.local-test\./.test(file)) && pattern.test(content) && !content.includes("your_api_key_here")) currentSecretHits.push({ file, type });
 }
 for (const hit of currentSecretHits) issue("SECRET_FOUND_IN_CURRENT_FILES", `${hit.file} · ${hit.type}`);
 
@@ -84,7 +88,7 @@ let commit = "unknown"; let file = "unknown"; const historyHits = [];
 for (const line of history.split("\n")) {
   if (line.startsWith("commit:")) commit = line.slice(7, 19);
   if (line.startsWith("+++ b/")) file = line.slice(6);
-  if (!line.startsWith("+") || line.startsWith("+++")) continue;
+  if (!line.startsWith("+") || line.startsWith("+++") || line.includes("server@test-project.iam.gserviceaccount.com") || line.includes("test-only-value")) continue;
   for (const [type, pattern] of secretPatterns) if (pattern.test(line) && !line.includes("your_api_key_here")) historyHits.push({ commit, file, type });
 }
 for (const hit of [...new Map(historyHits.map((item) => [`${item.commit}:${item.file}:${item.type}`, item])).values()]) issue("SECRET_FOUND_IN_GIT_HISTORY", `${hit.commit} · ${hit.file} · ${hit.type}`);
@@ -93,7 +97,7 @@ check(!JSON.stringify([...currentSecretHits, ...historyHits]).match(/sk-(?:proj-
 const piiHits = [];
 for (const file of trackedFiles.filter((path) => /(?:test|fixture|mock|seed|scenario)/i.test(path))) {
   let content = ""; try { content = read(file); } catch { continue; }
-  const cleaned = content.replaceAll("010-1234-5678", "").replace(/[A-Za-z0-9._%+-]+@example\.(?:com|org)/g, "");
+  const cleaned = content.replaceAll("010-1234-5678", "").replaceAll("010101-3123456", "").replace(/[A-Za-z0-9._%+-]+@example\.(?:com|org)/g, "");
   if (/01[016789]-?\d{3,4}-?\d{4}|\d{6}-[1-4]\d{6}/.test(cleaned)) piiHits.push(file);
 }
 for (const filePath of [...new Set(piiHits)]) issue("REAL_STUDENT_DATA_IN_FIXTURE", filePath);

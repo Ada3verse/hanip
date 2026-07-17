@@ -30,7 +30,7 @@ export async function proxy(request: NextRequest) {
   if (isPrivate) response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   for (const [key, value] of corsResponseHeaders(request)) response.headers.set(key, value);
 
-  const protectedPath = ["/chat", "/progress", "/settings", "/account"].some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  const protectedPath = pathname === "/" || ["/chat", "/progress", "/settings", "/account"].some((path) => pathname === path || pathname.startsWith(`${path}/`));
   const adminPath = pathname === "/admin" || pathname.startsWith("/admin/");
   if (adminPath && pathname !== "/admin/login") {
     const adminCookie = request.cookies.get("hanip_admin_session")?.value;
@@ -42,7 +42,7 @@ export async function proxy(request: NextRequest) {
   if (!protectedPath) return response;
   const cookie = request.cookies.get(STUDENT_SESSION_COOKIE)?.value;
   if (!cookie || !(await validSignature(cookie, process.env.HANIP_SESSION_SECRET))) {
-    const login = new URL("/login", request.url); login.searchParams.set("next", request.nextUrl.pathname);
+    const login = new URL("/login", request.url); login.searchParams.set("next", `${request.nextUrl.pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(login);
   }
   return response;
