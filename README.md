@@ -1,8 +1,38 @@
 # 한잎(Hanip)
 
-중학생들이 디벗을 활용하여 국어 문법을 스스로 학습할 수 있도록 개발한 AI 기반 문법 학습 웹앱
+> AI 기반 국어 문법 학습 플랫폼
 
-> **배포 서비스: [한잎 바로가기](https://hanip.vercel.app)**
+중학생이 디벗을 활용하여 국어 문법을 스스로 학습할 수 있도록 개발한 AI 기반 학습 웹앱입니다.
+
+**🌐 Demo**
+
+[https://hanip.vercel.app](https://hanip.vercel.app)
+
+**👨‍🎓 대상**
+
+- 중학생
+- 국어 교사
+
+**🛠 Tech**
+
+- Next.js
+- TypeScript
+- Firebase
+- OpenAI
+- Vercel
+
+**현재 범위**: 품사 중심 Knowledge Pack Draft · 운영자 발급 학생 계정 · 학교 현장 시험 운영 전 단계
+
+## 목차
+
+- [프로젝트 소개](#프로젝트-소개)
+- [핵심 기능](#핵심-기능)
+- [교육적 설계](#교육적-설계)
+- [개인정보·보안](#개인정보보안)
+- [기술 스택](#기술-스택)
+- [서비스 구조](#서비스-구조)
+- [로컬 실행](#로컬-실행)
+- [현재 상태](#현재-상태)
 
 ## 프로젝트 소개
 
@@ -30,6 +60,7 @@
 
 ### 관리자
 
+- 학생 인증과 분리된 관리자 ID·비밀번호 로그인
 - 학생 검색, 로그인 실패 횟수, 잠금 및 보유 기한 확인
 - 학생 PIN 초기화와 계정 잠금 해제
 - PIN 초기화 후 기존 대화·학습 기록 유지 및 기존 세션 폐기
@@ -63,7 +94,7 @@
 - 학생 데이터는 운영 정책상 매년 12월 31일까지 보유 후 정리
 - 실명, 학번, 전화번호, 이메일을 기본 수집 항목으로 사용하지 않음
 
-자세한 내용은 서비스의 [개인정보 처리방침](https://hanip.vercel.app/privacy)과 [이용약관](https://hanip.vercel.app/terms)에서 확인할 수 있습니다.
+자세한 내용은 서비스 내 개인정보 처리방침과 이용약관 화면에서 확인할 수 있습니다.
 
 ## 기술 스택
 
@@ -91,6 +122,28 @@
 ```
 
 Runtime은 현재 대화, Student Model, 학습 목표, Retrieval 결과를 조합합니다. 개발 및 자동 회귀 검사에서는 같은 응답 계약을 따르는 Mock Provider를 사용하고, 운영 설정에서만 OpenAI Provider를 사용합니다.
+
+## 프로젝트 구조
+
+```text
+src/
+├── app/                 # 학생·관리자 화면과 서버 API
+├── components/ui/       # 공통 UI 컴포넌트
+└── lib/
+    ├── runtime/         # 튜터 Runtime과 응답 Provider
+    ├── learningState/   # 현재 학습 상태 계산
+    ├── knowledge/       # 품사 Knowledge Pack과 Retrieval
+    ├── studentModel/    # 학생 이해도와 설명 이력
+    ├── repository/      # Local·Firebase 저장소 Provider
+    ├── security/        # 학생 인증, 세션, 개인정보 보호
+    └── admin/           # 관리자 인증과 운영 기능
+public/                  # 아이콘, manifest, offline 자산
+scripts/                 # 보안·배포·계정·보유기간 운영 검사
+firestore.rules          # Firestore 접근 제어 규칙
+firestore.indexes.json   # Firestore Index 설정
+```
+
+개발 전용 검증 화면은 `src/app/dev`에 분리되어 있으며 Production build 과정에서 제외됩니다.
 
 ## 주요 화면
 
@@ -159,7 +212,7 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 
 # Firebase Admin: 서버 전용
-FIREBASE_CLIENT_EMAIL=firebase-adminsdk@example-project.iam.gserviceaccount.com
+FIREBASE_CLIENT_EMAIL=your_firebase_admin_client_email
 FIREBASE_PROJECT_ID=your-project-id
 FIREBASE_PRIVATE_KEY=your_multiline_private_key_from_secret_manager
 ```
@@ -197,9 +250,8 @@ npm run deployment:ready
 - 교사 피드백 기반 관리자 통계 개선
 - 접근성과 디벗 사용성 지속 보완
 
-## 라이선스·저작권 주의
+## 저작권 주의
 
 - 교과서 PDF 원문은 저장소에 포함하지 않습니다.
 - 교과서 원문 전체를 학생 응답이나 관리자 화면에 노출하지 않습니다.
 - 출처 검토를 거쳐 교육 목적에 필요한 구조화된 지식만 사용합니다.
-- 이 저장소에는 별도의 오픈소스 라이선스가 명시되어 있지 않으므로 임의의 라이선스를 적용하지 않습니다.
