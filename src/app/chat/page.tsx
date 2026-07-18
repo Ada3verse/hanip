@@ -990,17 +990,17 @@ function ChatContent() {
   }
 
   return (
-    <main className="flex h-dvh flex-col overflow-hidden bg-white text-black">
-      <header className="shrink-0 border-b border-zinc-200 px-4 py-4 sm:px-8">
-        <div className="relative mx-auto flex w-full max-w-3xl items-center justify-center">
+    <main className="flex h-dvh flex-col overflow-hidden bg-stone-50 text-stone-950">
+      <header className="shrink-0 border-b border-stone-200 bg-white px-4 py-3 sm:px-8">
+        <div className="relative mx-auto flex w-full max-w-4xl items-center justify-center">
           <Link
             href="/"
-            className="absolute left-0 inline-flex min-h-11 items-center text-sm font-medium sm:text-base"
+            className="absolute left-0 inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-bold hover:bg-stone-100 sm:text-base"
           >
             ← 홈
           </Link>
           <div className="text-center">
-            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">한잎</h1>
+            <h1 className="text-xl font-black tracking-tight text-emerald-900 sm:text-2xl">한잎 학습</h1>
             <p className="mt-1 text-xs text-zinc-600 sm:text-sm">
               {learningContextLabel}
             </p>
@@ -1008,7 +1008,7 @@ function ChatContent() {
           <button
             type="button"
             onClick={handleStartNewLearning}
-            className="absolute right-0 inline-flex min-h-11 items-center text-xs font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black sm:text-sm"
+            className="absolute right-0 inline-flex min-h-11 items-center rounded-lg px-2 text-xs font-bold hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black sm:text-sm"
           >
             새 학습 시작
           </button>
@@ -1050,20 +1050,19 @@ function ChatContent() {
             </p>
           )}
         {userSettings.showLearningStatus && studentModel.goalState && (
-          <div className="mx-auto mt-2 w-full max-w-3xl rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-700 sm:text-sm">
-            <p><span className="font-semibold">현재 목표</span> · {studentModel.goalState.currentGoal}</p>
-            <p className="mt-1"><span className="font-semibold">현재 미션</span> · {studentModel.goalState.missionDescription}</p>
-            <p className="mt-1 text-zinc-500">예상 남은 단계 · {studentModel.goalState.estimatedRemaining}</p>
-          </div>
+          <details className="mx-auto mt-2 w-full max-w-4xl rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-stone-700 sm:text-sm" open>
+            <summary className="cursor-pointer font-bold text-emerald-950">현재 학습 상태</summary>
+            <div className="mt-2 grid gap-2 sm:grid-cols-3"><p><span className="font-semibold">목표</span><br/>{studentModel.goalState.currentGoal}</p><p><span className="font-semibold">미션</span><br/>{studentModel.goalState.missionDescription}</p><p><span className="font-semibold">남은 단계</span><br/>{studentModel.goalState.estimatedRemaining}</p></div>
+          </details>
         )}
       </header>
 
       <section
         aria-label="대화 내용"
         aria-live="polite"
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8 sm:py-10"
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-8 sm:py-8"
       >
-        <div className="mx-auto w-full max-w-3xl space-y-6">
+        <div className="mx-auto w-full max-w-4xl space-y-6">
           {messages.map((message) => (
             <article
               key={message.id}
@@ -1071,11 +1070,11 @@ function ChatContent() {
                 message.role === "user" ? "items-end" : "items-start"
               }`}
             >
-              <p className="mb-2 text-sm font-bold">
+              <p className="mb-2 text-xs font-bold text-stone-600 sm:text-sm">
                 {message.role === "user" ? studentDisplayName : userSettings.tutorName}
               </p>
               {message.role === "assistant" ? (
-                <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-zinc-100 px-4 py-3 text-sm leading-7 text-black sm:max-w-[75%] sm:text-base sm:leading-8">
+                <div className={`max-w-[92%] rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-7 text-black shadow-sm sm:max-w-[78%] sm:px-5 sm:py-4 sm:text-base sm:leading-8 ${message.isError ? "border-red-200 bg-red-50" : "border-stone-200 bg-white"}`}>
                   <ReactMarkdown
                     skipHtml
                     allowedElements={ASSISTANT_MARKDOWN_ELEMENTS}
@@ -1109,14 +1108,14 @@ function ChatContent() {
                   </ReactMarkdown>
                 </div>
               ) : (
-                <p className="max-w-[85%] whitespace-pre-line rounded-2xl rounded-tr-sm bg-black px-4 py-3 text-sm leading-7 text-white sm:max-w-[75%] sm:text-base sm:leading-8">
+                <p className="max-w-[88%] whitespace-pre-line rounded-2xl rounded-tr-sm bg-stone-950 px-4 py-3 text-sm leading-7 text-white shadow-sm sm:max-w-[72%] sm:text-base sm:leading-8">
                   {message.content}
                 </p>
               )}
               {message.role === "assistant" && message.suggestedReplies.length > 0 &&
                 (userSettings.showSuggestedReplies || userSettings.preferredInputMode === "choice_preferred" || message.suggestedReplies.includes("오늘은 여기까지")) && (
                   <div
-                    className="mt-3 flex max-w-[85%] flex-wrap gap-2 sm:max-w-[75%]"
+                    className="mt-3 grid w-full max-w-[92%] grid-cols-1 gap-2 min-[520px]:grid-cols-2 sm:max-w-[78%] lg:grid-cols-3"
                     aria-label="추천 답변"
                   >
                     {message.suggestedReplies.map((reply) => {
@@ -1129,7 +1128,7 @@ function ChatContent() {
                           type="button"
                           disabled={!isActive}
                           onClick={() => void sendMessage(reply, "suggested")}
-                          className="min-h-11 rounded-lg border border-black bg-white px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black disabled:cursor-not-allowed disabled:border-zinc-300 disabled:text-zinc-400 disabled:hover:bg-white sm:text-base"
+                          className={`min-h-12 rounded-xl border px-4 py-2 text-sm font-semibold text-black transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed sm:text-base ${reply.includes("모르") ? "border-stone-300 bg-stone-50 hover:bg-stone-100" : "border-emerald-800 bg-white hover:bg-emerald-50"} disabled:border-stone-200 disabled:bg-stone-100 disabled:text-stone-400`}
                         >
                           {reply}
                         </button>
@@ -1156,19 +1155,15 @@ function ChatContent() {
                 )}
             </article>
           ))}
-          {isLoading && (
-            <p role="status" className="text-sm text-zinc-600">
-              답변을 준비하고 있어요…
-            </p>
-          )}
+          {isLoading && <div role="status" className="flex items-center gap-3 text-sm text-stone-600"><span className="grid size-8 place-items-center rounded-full bg-emerald-100 font-bold text-emerald-900" aria-hidden="true">잎</span><span className="rounded-2xl border border-stone-200 bg-white px-4 py-3"><span className="inline-flex gap-1" aria-hidden="true"><i className="size-1.5 animate-bounce rounded-full bg-stone-500"/><i className="size-1.5 animate-bounce rounded-full bg-stone-500 [animation-delay:120ms]"/><i className="size-1.5 animate-bounce rounded-full bg-stone-500 [animation-delay:240ms]"/></span><span className="sr-only">답변을 준비하고 있어요.</span></span></div>}
           <div ref={conversationEndRef} />
         </div>
       </section>
 
-      <footer className="shrink-0 border-t border-zinc-200 bg-white px-4 py-4 sm:px-8 sm:py-5">
+      <footer className="shrink-0 border-t border-stone-200 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgba(0,0,0,0.03)] sm:px-8 sm:py-4">
         <form
           onSubmit={handleSubmit}
-          className="mx-auto flex w-full max-w-3xl items-end gap-3"
+          className="mx-auto flex w-full max-w-4xl items-end gap-2 sm:gap-3"
         >
           <label htmlFor="message" className="sr-only">
             메시지 입력
@@ -1190,12 +1185,12 @@ function ChatContent() {
               setInput(clearInputRef.current ? "" : event.currentTarget.value);
             }}
             placeholder="메시지를 입력하세요."
-            className="min-h-12 flex-1 resize-none rounded-lg border border-zinc-300 bg-zinc-100 px-4 py-3 text-sm text-black outline-none placeholder:text-zinc-500 focus:border-black sm:text-base"
+            className="max-h-36 min-h-12 flex-1 resize-none rounded-xl border border-stone-300 bg-stone-50 px-4 py-3 text-base text-black outline-none placeholder:text-stone-500 focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100"
           />
           <button
             type="submit"
             disabled={isLoading}
-            className="min-h-12 shrink-0 rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-zinc-500 sm:text-base"
+            className="min-h-12 shrink-0 rounded-xl bg-stone-950 px-5 py-3 text-sm font-semibold text-white hover:bg-emerald-900 disabled:cursor-not-allowed disabled:bg-stone-300 sm:text-base"
           >
             {isLoading ? "응답 중" : "보내기"}
           </button>

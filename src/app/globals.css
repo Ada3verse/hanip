@@ -3,6 +3,8 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --leaf: #2f6b4f;
+  --leaf-soft: #e8f3ec;
   --hanip-text-scale: 1;
   font-size: calc(16px * var(--hanip-text-scale));
 }
@@ -18,14 +20,21 @@
 }
 
 body {
-  background: var(--background);
+  background: #fafaf9;
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 button, a, input, textarea { -webkit-tap-highlight-color: transparent; }
 button, [role="button"], a { touch-action: manipulation; }
 :focus-visible { outline: 2px solid #111; outline-offset: 2px; }
+.app-nav-link { display: inline-flex; min-height: 44px; align-items: center; border-radius: 0.75rem; padding: 0 0.65rem; color: #44403c; transition: background-color 180ms, color 180ms; }
+.app-nav-link:hover, .app-nav-link[aria-current="page"] { background: var(--leaf-soft); color: #14532d; }
+.surface-card { border: 1px solid #e7e5e4; border-radius: 1rem; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.04); }
+button, a, input, textarea, select { transition-duration: 180ms; }
+textarea, input, select { font-size: 16px; }
 
 :root[data-reduced-motion="true"] *,
 :root[data-reduced-motion="true"] *::before,

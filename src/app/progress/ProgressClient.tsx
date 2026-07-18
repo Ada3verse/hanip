@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { loadChatSession } from "@/lib/chat/sessionStorage";
 import { getAuthSession } from "@/lib/auth/authSession";
 import { applyUserSettings, loadUserSettings } from "@/lib/settings/settingsEngine";
+import { AppHeader } from "@/components/ui/AppHeader";
+import { LoadingSkeleton, PageContainer, StatusBadge } from "@/components/ui";
 
 import { createProgressChatHref } from "@/lib/progress/progressEngine";
 import {
@@ -54,7 +56,7 @@ export default function ProgressClient() {
   }
 
   if (!progress) {
-    return <main className="min-h-screen bg-white" />;
+    return <main className="min-h-screen bg-stone-50"><AppHeader subtitle="내 학습 흐름"/><PageContainer className="py-10"><LoadingSkeleton label="학습 기록을 불러오고 있어요."/></PageContainer></main>;
   }
 
   const understoodCount = progress.concepts.filter(
@@ -65,12 +67,12 @@ export default function ProgressClient() {
   ).length;
 
   return (
-    <main className="min-h-screen bg-zinc-50 px-4 py-8 text-black sm:px-8 sm:py-12">
-      <div className="mx-auto max-w-5xl">
+    <main className="min-h-screen bg-stone-50 text-stone-950">
+      <AppHeader subtitle="내 학습 흐름" />
+      <PageContainer className="py-8 sm:py-10">
         <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <Link href="/" className="text-sm font-medium">← 홈</Link>
-            <h1 className="mt-4 text-3xl font-bold tracking-tight">내 학습 기록</h1>
+            <h1 className="text-3xl font-black tracking-tight">내 학습 기록</h1>
             <p className="mt-2 text-sm text-zinc-600">
               이 브라우저에서 학습한 개념과 복습할 내용을 확인할 수 있어요.
             </p>
@@ -78,7 +80,7 @@ export default function ProgressClient() {
           <button
             type="button"
             onClick={handleClearProgress}
-            className="self-start rounded-lg border border-zinc-400 bg-white px-4 py-2 text-sm font-semibold hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black sm:self-auto"
+            className="min-h-12 self-start rounded-xl border border-stone-300 bg-white px-4 text-sm font-semibold hover:bg-stone-100 sm:self-auto"
           >
             학습 기록 초기화
           </button>
@@ -91,7 +93,7 @@ export default function ProgressClient() {
             ["이해한 개념", understoodCount],
             ["복습 필요", reviewCount],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-xl border border-zinc-200 bg-white p-4">
+            <div key={label} className="surface-card p-4">
               <p className="text-xs text-zinc-600 sm:text-sm">{label}</p>
               <p className="mt-1 text-2xl font-bold">{value}</p>
             </div>
@@ -99,10 +101,10 @@ export default function ProgressClient() {
         </section>
 
         {progress.concepts.length === 0 ? (
-          <section className="mt-8 rounded-2xl border border-zinc-200 bg-white p-8 text-center">
-            <p className="text-zinc-700">아직 누적된 학습 기록이 없어요.</p>
-            <Link href="/" className="mt-4 inline-block rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white">
-              학습 시작하기
+          <section className="surface-card mt-8 p-10 text-center">
+            <div className="mx-auto grid size-12 place-items-center rounded-full bg-emerald-100 text-emerald-900" aria-hidden="true">잎</div><h2 className="mt-4 text-xl font-bold">아직 학습 기록이 없어요.</h2><p className="mt-2 text-sm text-stone-600">첫 질문을 남기면 배운 개념과 다시 볼 내용을 여기에 정리해 드려요.</p>
+            <Link href="/" className="mt-5 inline-flex min-h-12 items-center rounded-xl bg-stone-950 px-5 text-sm font-semibold text-white">
+              첫 학습 시작하기
             </Link>
           </section>
         ) : (
@@ -110,18 +112,16 @@ export default function ProgressClient() {
             {[...progress.concepts]
               .sort((a, b) => Date.parse(b.lastStudiedAt) - Date.parse(a.lastStudiedAt))
               .map((concept) => (
-                <article key={concept.conceptId} className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+                <article key={concept.conceptId} className="surface-card p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h2 className="text-lg font-bold">{concept.conceptName}</h2>
-                      <p className="mt-1 text-sm text-zinc-600">
-                        {STATUS_LABELS[concept.status]}
-                      </p>
+                      <div className="mt-2"><StatusBadge tone={concept.status === "understood" ? "success" : concept.status === "needs_review" ? "warning" : "neutral"}>{STATUS_LABELS[concept.status]}</StatusBadge></div>
                     </div>
-                    <p className="text-right text-sm"><strong className="text-2xl">{concept.masteryScore}</strong>/100</p>
+                    <p className="text-right text-xs text-stone-500">이해 흐름<br/><strong className="text-base text-stone-800">{concept.masteryScore < 50 ? "배우는 중" : concept.masteryScore < 70 ? "익히는 중" : "안정적"}</strong></p>
                   </div>
                   <div className="mt-4 h-2 overflow-hidden rounded-full bg-zinc-200" aria-label={`이해 점수 ${concept.masteryScore}점`}>
-                    <div className="h-full bg-black" style={{ width: `${concept.masteryScore}%` }} />
+                    <div className="h-full bg-emerald-700" style={{ width: `${concept.masteryScore}%` }} />
                   </div>
                   <p className="mt-4 text-sm text-zinc-600">
                     마지막 학습: {new Date(concept.lastStudiedAt).toLocaleString("ko-KR")}
@@ -145,7 +145,7 @@ export default function ProgressClient() {
                       <Link
                         key={action}
                         href={createProgressChatHref(concept, action)}
-                        className="min-h-10 rounded-lg border border-black bg-white px-3 py-2 text-sm font-semibold hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black"
+                        className="inline-flex min-h-12 items-center rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold hover:border-emerald-700 hover:bg-emerald-50"
                       >
                         {label}
                       </Link>
@@ -163,7 +163,7 @@ export default function ProgressClient() {
               ))}
           </section>
         )}
-      </div>
+      </PageContainer>
     </main>
   );
 }

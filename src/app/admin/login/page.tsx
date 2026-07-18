@@ -1,21 +1,5 @@
 "use client";
-
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-
-export default function AdminLoginPage() {
-  const router = useRouter();
-  const [adminId, setAdminId] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  async function submit(event: FormEvent) {
-    event.preventDefault(); setLoading(true); setError("");
-    try {
-      const response = await fetch("/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adminId, password }) });
-      if (!response.ok) throw new Error("login_failed");
-      router.replace("/admin"); router.refresh();
-    } catch { setError("관리자 인증에 실패했습니다."); } finally { setLoading(false); }
-  }
-  return <main className="flex min-h-screen items-center justify-center bg-white px-5 text-black"><form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-2xl border border-gray-200 p-6"><div><p className="text-sm text-gray-500">학생 계정과 분리된 운영자 영역</p><h1 className="mt-1 text-2xl font-semibold">한잎 관리자 로그인</h1></div><label className="block text-sm font-medium">관리자 ID<input className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" autoComplete="username" value={adminId} onChange={(event)=>setAdminId(event.target.value)} required /></label><label className="block text-sm font-medium">비밀번호<input className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2" type="password" autoComplete="current-password" minLength={8} value={password} onChange={(event)=>setPassword(event.target.value)} required /></label><p className="text-xs text-gray-500">비밀번호는 최소 8자이며 12자 이상을 권장합니다.</p>{error&&<p role="alert" className="text-sm text-red-700">{error}</p>}<button className="min-h-11 w-full rounded-lg bg-black px-4 py-2 text-white disabled:bg-gray-400" disabled={loading}>{loading?"확인 중…":"로그인"}</button></form></main>;
-}
+import { InlineNotice, PrimaryButton } from "@/components/ui";
+export default function AdminLoginPage() { const router=useRouter();const[adminId,setAdminId]=useState("");const[password,setPassword]=useState("");const[error,setError]=useState("");const[loading,setLoading]=useState(false);const ready=adminId.trim().length>0&&password.length>=8&&!loading;async function submit(event:FormEvent){event.preventDefault();if(!ready)return;setLoading(true);setError("");try{const response=await fetch("/api/admin/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({adminId,password})});if(!response.ok)throw new Error("login_failed");router.replace("/admin");router.refresh();}catch{setError("관리자 인증에 실패했습니다.");}finally{setLoading(false)}}return <main className="grid min-h-screen place-items-center bg-stone-100 px-5 py-10 text-stone-950"><section className="w-full max-w-md"><div className="text-center"><div className="mx-auto grid size-12 place-items-center rounded-xl bg-stone-950 font-black text-emerald-300" aria-hidden="true">H</div><p className="mt-4 text-xs font-bold tracking-widest text-emerald-800">HANIP ADMIN</p><h1 className="mt-1 text-3xl font-black">관리자 로그인</h1><p className="mt-2 text-sm text-stone-600">학생 계정과 분리된 운영자 전용 영역입니다.</p></div><form onSubmit={submit} className="surface-card mt-7 space-y-5 p-6"><label htmlFor="admin-id" className="block text-sm font-bold">관리자 ID<input id="admin-id" className="mt-2 min-h-12 w-full rounded-xl border border-stone-300 px-4 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-100" autoComplete="username" value={adminId} onChange={(event)=>setAdminId(event.target.value)} required /></label><label htmlFor="admin-password" className="block text-sm font-bold">비밀번호<input id="admin-password" className="mt-2 min-h-12 w-full rounded-xl border border-stone-300 px-4 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-100" type="password" autoComplete="current-password" minLength={8} value={password} onChange={(event)=>setPassword(event.target.value)} required /></label><p className="text-xs leading-5 text-stone-500">비밀번호는 최소 8자이며 12자 이상을 권장합니다. 5회 실패하면 로그인이 잠깁니다.</p>{error&&<InlineNotice tone="error">{error}</InlineNotice>}<PrimaryButton className="w-full" disabled={!ready}>{loading?"인증 확인 중…":"관리자 로그인"}</PrimaryButton></form></section></main>}

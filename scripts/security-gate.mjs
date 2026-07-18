@@ -26,6 +26,9 @@ const adminAuth = read("src/lib/admin/adminAuth.ts");
 const adminConversationView = read("src/app/admin/conversations/[conversationId]/ConversationReviewClient.tsx");
 const firestoreRules = read("firestore.rules");
 const privacyPolicy = read("src/lib/security/privacyPolicy.ts");
+const uiComponents = read("src/components/ui/index.tsx");
+const homeClient = read("src/app/HomeClient.tsx");
+const chatPage = read("src/app/chat/page.tsx");
 
 check(nextConfig.includes("noindex, nofollow") && ["/login", "/chat/:path*", "/account/:path*", "/dev/:path*"].every((path) => nextConfig.includes(path)), "AUTH_PAGE_INDEXABLE", "비공개 페이지 noindex 누락");
 check(["/login", "/chat", "/progress", "/settings", "/account", "/admin", "/dev", "/api"].every((path) => robots.includes(`\"${path}`)), "ROBOTS_SENSITIVE_ROUTE_EXPOSED", "robots 민감 경로 누락");
@@ -41,6 +44,10 @@ check(proxy.includes('pathname === "/"') && proxy.includes("/account") && proxy.
 check(read("src/app/page.tsx").includes('requireStudentPageSession("/")') && ["chat", "progress", "settings", "account"].every((path) => read(`src/app/${path}/layout.tsx`).includes("requireStudentPageSession")), "STUDENT_ROUTE_SERVER_AUTH_MISSING", "학생 전용 화면의 서버 세션 재검증 누락");
 check(read("src/app/login/layout.tsx").includes("getAuthenticatedStudentSession") && studentLoginPage.includes("getSafeReturnPath"), "STUDENT_LOGIN_RETURN_FLOW_MISSING", "로그인 사용자 우회 또는 안전한 복귀 경로 누락");
 check(read("src/app/api/chat/route.ts").includes('authenticatedSession.role !== "student"'), "CHAT_STUDENT_SESSION_NOT_ENFORCED", "채팅 API 학생 role 재검증 누락");
+check(uiComponents.includes("min-h-12") && read("src/app/globals.css").includes("prefers-reduced-motion") && read("src/app/globals.css").includes("font-size: 16px"), "CLASSROOM_UI_ACCESSIBILITY_MISSING", "터치 크기·모션 감소·모바일 입력 접근성 누락");
+check(studentLoginPage.includes('inputMode="numeric"') && studentLoginPage.includes("remainingAttempts") && studentLoginPage.includes('role="dialog"'), "STUDENT_LOGIN_UX_INCOMPLETE", "PIN 키패드·남은 횟수·잠금 dialog 누락");
+check(homeClient.includes("EXAMPLE_QUESTIONS") && homeClient.includes("maxLength={500}") && homeClient.includes("Shift+Enter"), "STUDENT_HOME_GUIDANCE_MISSING", "예시 질문·글자 수·키보드 안내 누락");
+check(chatPage.includes('aria-label="대화 내용"') && chatPage.includes("다시 시도") && chatPage.includes("safe-area-inset-bottom"), "CHAT_CLASSROOM_UX_INCOMPLETE", "대화 접근성·재시도·모바일 입력창 보호 누락");
 check(read("src/app/admin/page.tsx").includes("AdminShell") && read("src/app/admin/login/page.tsx").includes("관리자 로그인"), "ADMIN_PAGE_MISSING", "관리자 페이지 누락");
 check(proxy.includes("hanip_admin_session") && proxy.includes("HANIP_ADMIN_SESSION_SECRET") && proxy.includes("/admin/login"), "ADMIN_API_UNPROTECTED", "관리자 경로의 별도 인증 경계 누락");
 check(proxy.includes("hanip_admin_session") && proxy.includes("HANIP_SESSION_SECRET") && proxy.includes("HANIP_ADMIN_SESSION_SECRET"), "ADMIN_SESSION_SHARED_WITH_STUDENT", "학생·관리자 세션 분리 누락");
@@ -57,7 +64,7 @@ check(adminApiRoute.includes("requireAdministrator") && firestoreRules.includes(
 check(studentAuthService.includes("failedLoginCount + 1") && studentAuthService.includes("Math.min(5") && studentAuthService.includes("PIN_ATTEMPTS_EXHAUSTED"), "PIN_ATTEMPT_LIMIT_NOT_ENFORCED", "학생 PIN 5회 제한 누락");
 check(studentAuthService.indexOf('record.status === "locked"') < studentAuthService.indexOf("verifyPin(input.pin"), "LOCKED_ACCOUNT_PIN_RECHECKED", "잠긴 계정에서 PIN 해시 재검증 가능");
 check(studentLoginPage.includes("로그인 제한") && studentLoginPage.includes("관리자에게 문의해 주세요"), "LOCKED_LOGIN_NOTICE_MISSING", "잠금 안내 Modal 누락");
-check(studentLoginPage.includes("disabled={locked}") && studentLoginPage.includes("disabled={loading||locked}"), "LOCKED_LOGIN_INPUT_STILL_ENABLED", "잠금 후 입력 또는 버튼 비활성화 누락");
+check(studentLoginPage.includes("disabled={locked}") && (studentLoginPage.includes("disabled={loading||locked}") || (studentLoginPage.includes("const ready =") && studentLoginPage.includes("!locked") && studentLoginPage.includes("disabled={!ready}"))), "LOCKED_LOGIN_INPUT_STILL_ENABLED", "잠금 후 입력 또는 버튼 비활성화 누락");
 check(adminApiRoute.includes('status:"active"') && adminApiRoute.includes("failedLoginCount:0") && adminApiRoute.includes("lockedUntil:null"), "PIN_RESET_DID_NOT_CLEAR_LOCK", "관리자 PIN 초기화 잠금 해제 누락");
 check(adminApiRoute.includes("sessions.docs.forEach") && adminApiRoute.includes("revokedAt"), "PIN_RESET_DID_NOT_REVOKE_SESSIONS", "PIN 초기화 기존 세션 폐기 누락");
 check(adminConversationView.includes('role==="assistant"') && adminConversationView.includes("한잎 AI") && adminApiRoute.includes('value.role==="assistant"'), "ADMIN_CONVERSATION_AI_RESPONSE_MISSING", "관리자 대화 상세 AI 응답 표시 누락");
